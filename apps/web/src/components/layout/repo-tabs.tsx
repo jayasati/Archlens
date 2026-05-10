@@ -13,8 +13,6 @@ const tabs: ReadonlyArray<{ slug: string; label: string }> = [
   { slug: '', label: 'Overview' },
   { slug: 'architecture', label: 'Architecture' },
   { slug: 'hotspots', label: 'Hotspots' },
-  { slug: 'modules', label: 'Modules' },
-  { slug: 'history', label: 'History' },
   { slug: 'settings', label: 'Settings' },
 ];
 

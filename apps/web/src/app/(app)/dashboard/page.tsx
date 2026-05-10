@@ -73,10 +73,10 @@ export default async function DashboardPage() {
             <Link
               key={repo.id}
               href={`/repos/${repo.owner}/${repo.name}`}
-              className="block focus:outline-none"
+              className="block cursor-pointer focus:outline-none focus-visible:ring-2 focus-visible:ring-ring rounded-lg"
               data-testid="dashboard-repo-card"
             >
-              <Card className="transition-shadow hover:shadow-md">
+              <Card className="cursor-pointer transition-all hover:border-primary/50 hover:shadow-md">
                 <CardHeader>
                   <CardTitle className="text-lg">{repo.fullName}</CardTitle>
                   <CardDescription>
@@ -88,7 +88,7 @@ export default async function DashboardPage() {
                     <>
                       <div>
                         <div className="text-3xl font-semibold">{formatScore(latest.overall)}</div>
-                        <div className="text-xs text-muted-foreground">
+                        <div className="text-xs text-muted-foreground" suppressHydrationWarning>
                           updated {formatRelativeDate(latest.scan.createdAt)}
                         </div>
                       </div>
