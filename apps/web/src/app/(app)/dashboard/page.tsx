@@ -3,8 +3,10 @@ import { redirect } from 'next/navigation';
 import type { Grade, RepositoryDto, ScanDto } from '@archlens/shared-types';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
+import { Button } from '@/components/ui/button';
 import { GradeBadge } from '@/components/score/grade-badge';
 import { getSessionToken } from '@/lib/auth/server';
+import { ApiError } from '@/lib/api/client';
 import { listReposServer } from '@/lib/api/repos';
 import { listScansServer } from '@/lib/api/scans';
 import { getReportSummaryServer } from '@/lib/api/reports';
@@ -18,9 +20,29 @@ interface RepoWithLatest {
     | null;
 }
 
-async function loadDashboard(token: string): Promise<RepoWithLatest[]> {
-  const repos = await listReposServer(token);
-  return Promise.all(
+type DashboardResult = { kind: 'ok'; rows: RepoWithLatest[] } | { kind: 'error'; message: string };
+
+async function loadDashboard(token: string): Promise<DashboardResult> {
+  let repos: RepositoryDto[];
+  try {
+    repos = await listReposServer(token);
+  } catch (e) {
+    if (e instanceof ApiError && e.status === 401) {
+      // Surfaced upstream by the page so we can redirect to /login.
+      throw e;
+    }
+    return {
+      kind: 'error',
+      message:
+        e instanceof ApiError
+          ? `API ${e.status}: ${e.statusText}`
+          : e instanceof Error
+            ? e.message
+            : 'Unknown error',
+    };
+  }
+
+  const rows = await Promise.all(
     repos.map(async (repo): Promise<RepoWithLatest> => {
       const scans = await listScansServer(token, repo.id).catch(() => [] as ScanDto[]);
       const latest = scans
@@ -41,13 +63,45 @@ async function loadDashboard(token: string): Promise<RepoWithLatest[]> {
       }
     })
   );
+
+  return { kind: 'ok', rows };
 }
 
 export default async function DashboardPage() {
   const token = await getSessionToken();
   if (!token) redirect('/login');
 
-  const rows = await loadDashboard(token);
+  let result: DashboardResult;
+  try {
+    result = await loadDashboard(token);
+  } catch (e) {
+    if (e instanceof ApiError && e.status === 401) redirect('/login?reauth=1');
+    throw e;
+  }
+
+  if (result.kind === 'error') {
+    return (
+      <Card data-testid="dashboard-error">
+        <CardHeader>
+          <CardTitle>Could not load dashboard</CardTitle>
+          <CardDescription>{result.message}</CardDescription>
+        </CardHeader>
+        <CardContent>
+          <p className="text-sm text-muted-foreground">
+            The Archlens API may be down. Check that{' '}
+            <code>pnpm --filter @archlens/api start:dev</code> is running.
+          </p>
+          <div className="mt-3 flex gap-2">
+            <Button asChild size="sm" variant="outline">
+              <Link href="/integrations">Manage repositories</Link>
+            </Button>
+          </div>
+        </CardContent>
+      </Card>
+    );
+  }
+
+  const rows = result.rows;
 
   return (
     <div className="space-y-6" data-testid="dashboard">
@@ -64,8 +118,13 @@ export default async function DashboardPage() {
         <Card>
           <CardHeader>
             <CardTitle>No repositories yet</CardTitle>
-            <CardDescription>Use the Integrations page to connect GitHub.</CardDescription>
+            <CardDescription>Connect a GitHub repository to see its scores here.</CardDescription>
           </CardHeader>
+          <CardContent>
+            <Button asChild>
+              <Link href="/integrations">Connect a repository</Link>
+            </Button>
+          </CardContent>
         </Card>
       ) : (
         <div className="grid grid-cols-1 gap-4 md:grid-cols-2 xl:grid-cols-3">

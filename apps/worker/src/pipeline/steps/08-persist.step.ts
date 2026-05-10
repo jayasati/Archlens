@@ -27,73 +27,81 @@ export class PersistStep {
 
     const counts = countIr(ir);
 
-    const reportId = await this.prisma.$transaction(async (tx) => {
-      const report = await tx.report.create({
-        data: {
-          scanId: ctx.input.scanId,
-          repoId: ctx.input.repoId,
-          irVersion: ir.ir_version,
-          grade: ir.grade,
-          overallScore: ir.scoreBreakdown.overall,
-          complexityScore: ir.scoreBreakdown.complexity,
-          duplicationScore: ir.scoreBreakdown.duplication,
-          couplingScore: ir.scoreBreakdown.coupling,
-          cohesionScore: ir.scoreBreakdown.cohesion,
-          smellsScore: ir.scoreBreakdown.smells,
-          modulesCount: counts.modules,
-          filesCount: counts.files,
-          classesCount: counts.classes,
-          functionsCount: counts.functions,
-          smellsCount: counts.smells,
-          irBlobPath,
-        },
-      });
-
-      for (const irModule of ir.modules) {
-        const moduleRow = await tx.module.create({
+    // Default $transaction timeout is 5s. A scan with hundreds of files +
+    // smells comfortably blows past that — the transaction is then closed
+    // and subsequent tx.create() calls throw "Transaction not found". Give
+    // the persist step a real budget. maxWait is how long we wait to acquire
+    // a tx slot; timeout is how long the tx itself can run.
+    const reportId = await this.prisma.$transaction(
+      async (tx) => {
+        const report = await tx.report.create({
           data: {
-            reportId: report.id,
-            irModuleId: irModule.id,
-            name: irModule.name,
-            virtual: irModule.virtual,
-            filesCount: irModule.files.length,
+            scanId: ctx.input.scanId,
+            repoId: ctx.input.repoId,
+            irVersion: ir.ir_version,
+            grade: ir.grade,
+            overallScore: ir.scoreBreakdown.overall,
+            complexityScore: ir.scoreBreakdown.complexity,
+            duplicationScore: ir.scoreBreakdown.duplication,
+            couplingScore: ir.scoreBreakdown.coupling,
+            cohesionScore: ir.scoreBreakdown.cohesion,
+            smellsScore: ir.scoreBreakdown.smells,
+            modulesCount: counts.modules,
+            filesCount: counts.files,
+            classesCount: counts.classes,
+            functionsCount: counts.functions,
+            smellsCount: counts.smells,
+            irBlobPath,
           },
         });
 
-        for (const irFile of irModule.files) {
-          const fileRow = await tx.file.create({
+        for (const irModule of ir.modules) {
+          const moduleRow = await tx.module.create({
             data: {
               reportId: report.id,
-              moduleId: moduleRow.id,
-              irFileId: irFile.id,
-              path: irFile.path,
-              language: irFile.language,
-              loc: irFile.loc,
+              irModuleId: irModule.id,
+              name: irModule.name,
+              virtual: irModule.virtual,
+              filesCount: irModule.files.length,
             },
           });
 
-          const fileSmells = collectFileSmells(irModule, irFile.id);
-          if (fileSmells.length > 0) {
-            await tx.smell.createMany({
-              data: fileSmells.map((s) => ({
+          for (const irFile of irModule.files) {
+            const fileRow = await tx.file.create({
+              data: {
                 reportId: report.id,
-                fileId: fileRow.id,
-                irSmellId: s.id,
-                kind: s.kind,
-                ruleId: s.ruleId,
-                severity: s.severity,
-                message: s.message,
-                filePath: s.file,
-                startLine: s.location?.startLine ?? null,
-                endLine: s.location?.endLine ?? null,
-              })),
+                moduleId: moduleRow.id,
+                irFileId: irFile.id,
+                path: irFile.path,
+                language: irFile.language,
+                loc: irFile.loc,
+              },
             });
+
+            const fileSmells = collectFileSmells(irModule, irFile.id);
+            if (fileSmells.length > 0) {
+              await tx.smell.createMany({
+                data: fileSmells.map((s) => ({
+                  reportId: report.id,
+                  fileId: fileRow.id,
+                  irSmellId: s.id,
+                  kind: s.kind,
+                  ruleId: s.ruleId,
+                  severity: s.severity,
+                  message: s.message,
+                  filePath: s.file,
+                  startLine: s.location?.startLine ?? null,
+                  endLine: s.location?.endLine ?? null,
+                })),
+              });
+            }
           }
         }
-      }
 
-      return report.id;
-    });
+        return report.id;
+      },
+      { maxWait: 10_000, timeout: 120_000 }
+    );
 
     ctx.reportId = reportId;
     this.logger.log(`Persisted report ${reportId} for scan ${ctx.input.scanId}`);

@@ -1,5 +1,6 @@
 import { notFound, redirect } from 'next/navigation';
 import type { ReportModuleScoreDto, ReportSummaryDto, ScanDto } from '@archlens/shared-types';
+import { ApiError } from '@/lib/api/client';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import {
   Table,
@@ -81,7 +82,13 @@ export default async function RepoOverviewPage({ params }: PageProps) {
   const token = await getSessionToken();
   if (!token) redirect('/login');
 
-  const data = await loadRepoOverview(token, params.owner, params.name);
+  let data: Awaited<ReturnType<typeof loadRepoOverview>>;
+  try {
+    data = await loadRepoOverview(token, params.owner, params.name);
+  } catch (e) {
+    if (e instanceof ApiError && e.status === 401) redirect('/login?reauth=1');
+    throw e;
+  }
   if (data === 'not-found') notFound();
 
   const { repoId, summary, modules, trend, latestScan } = data;

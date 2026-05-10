@@ -4,6 +4,7 @@ import 'next-auth/jwt';
 declare module 'next-auth' {
   interface Session {
     archlensAccessToken?: string;
+    error?: string;
   }
 
   interface User {
@@ -18,6 +19,7 @@ declare module 'next-auth/jwt' {
       accessToken: string;
       refreshToken: string;
       expiresAt: number;
+      error?: 'RefreshFailed';
     };
   }
 }
