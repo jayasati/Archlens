@@ -19,4 +19,5 @@ module.exports = {
   },
   setupFilesAfterEnv: ['<rootDir>/test/jest-e2e.setup.ts'],
   testTimeout: 30000,
+  forceExit: true,
 };

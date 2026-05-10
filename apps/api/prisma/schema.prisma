@@ -55,9 +55,114 @@ model Repository {
   connectedAt   DateTime @default(now())
   updatedAt     DateTime @updatedAt
 
-  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+  user  User   @relation(fields: [userId], references: [id], onDelete: Cascade)
+  scans Scan[]
 
   @@unique([userId, provider, fullName])
   @@index([userId])
   @@map("repositories")
+}
+
+model Scan {
+  id           String    @id @default(uuid()) @db.Uuid
+  repoId       String    @db.Uuid
+  status       String    @default("queued")
+  progressPct  Int       @default(0)
+  progressStep String?
+  error        String?
+  cloneUrl     String
+  ref          String?
+  createdAt    DateTime  @default(now())
+  startedAt    DateTime?
+  finishedAt   DateTime?
+
+  repository Repository @relation(fields: [repoId], references: [id], onDelete: Cascade)
+  report     Report?
+
+  @@index([repoId, createdAt])
+  @@index([status])
+  @@map("scans")
+}
+
+model Report {
+  id               String   @id @default(uuid()) @db.Uuid
+  scanId           String   @unique @db.Uuid
+  repoId           String   @db.Uuid
+  irVersion        String
+  grade            String
+  overallScore     Float
+  complexityScore  Float
+  duplicationScore Float
+  couplingScore    Float
+  cohesionScore    Float
+  smellsScore      Float
+  modulesCount     Int      @default(0)
+  filesCount       Int      @default(0)
+  classesCount     Int      @default(0)
+  functionsCount   Int      @default(0)
+  smellsCount      Int      @default(0)
+  irBlobPath       String
+  generatedAt      DateTime @default(now())
+
+  scan    Scan     @relation(fields: [scanId], references: [id], onDelete: Cascade)
+  modules Module[]
+  files   File[]
+  smells  Smell[]
+
+  @@index([repoId, generatedAt])
+  @@map("reports")
+}
+
+model Module {
+  id         String  @id @default(uuid()) @db.Uuid
+  reportId   String  @db.Uuid
+  irModuleId String
+  name       String
+  virtual    Boolean @default(false)
+  filesCount Int     @default(0)
+
+  report Report @relation(fields: [reportId], references: [id], onDelete: Cascade)
+  files  File[]
+
+  @@index([reportId])
+  @@map("modules")
+}
+
+model File {
+  id       String @id @default(uuid()) @db.Uuid
+  reportId String @db.Uuid
+  moduleId String @db.Uuid
+  irFileId String
+  path     String
+  language String
+  loc      Int    @default(0)
+
+  report Report  @relation(fields: [reportId], references: [id], onDelete: Cascade)
+  module Module  @relation(fields: [moduleId], references: [id], onDelete: Cascade)
+  smells Smell[]
+
+  @@index([reportId])
+  @@index([moduleId])
+  @@map("files")
+}
+
+model Smell {
+  id        String  @id @default(uuid()) @db.Uuid
+  reportId  String  @db.Uuid
+  fileId    String? @db.Uuid
+  irSmellId String
+  kind      String
+  ruleId    String
+  severity  String
+  message   String
+  filePath  String
+  startLine Int?
+  endLine   Int?
+
+  report Report @relation(fields: [reportId], references: [id], onDelete: Cascade)
+  file   File?  @relation(fields: [fileId], references: [id], onDelete: SetNull)
+
+  @@index([reportId])
+  @@index([reportId, severity])
+  @@map("smells")
 }

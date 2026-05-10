@@ -26,6 +26,11 @@ export async function createTestApp(): Promise<{
 }
 
 export async function resetDb(prisma: PrismaService): Promise<void> {
+  await prisma.smell.deleteMany();
+  await prisma.file.deleteMany();
+  await prisma.module.deleteMany();
+  await prisma.report.deleteMany();
+  await prisma.scan.deleteMany();
   await prisma.repository.deleteMany();
   await prisma.account.deleteMany();
   await prisma.user.deleteMany();

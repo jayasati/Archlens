@@ -11,9 +11,11 @@ import { ZodValidationPipe } from './common/pipes/zod-validation.pipe';
 import { JwtAuthGuard } from './common/guards/jwt-auth.guard';
 
 import { PrismaModule } from './database/prisma.module';
+import { QueueModule } from './queue/queue.module';
 import { AuthModule } from './modules/auth/auth.module';
 import { UsersModule } from './modules/users/users.module';
 import { RepositoriesModule } from './modules/repositories/repositories.module';
+import { ScansModule } from './modules/scans/scans.module';
 import { HealthModule } from './modules/health/health.module';
 
 @Module({
@@ -25,9 +27,11 @@ import { HealthModule } from './modules/health/health.module';
       validate: validateEnv,
     }),
     PrismaModule,
+    QueueModule,
     AuthModule,
     UsersModule,
     RepositoriesModule,
+    ScansModule,
     HealthModule,
   ],
   providers: [

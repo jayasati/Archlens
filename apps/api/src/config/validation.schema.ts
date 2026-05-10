@@ -7,6 +7,8 @@ export const envSchema = z.object({
   DATABASE_URL: z.string().url(),
   DIRECT_DATABASE_URL: z.string().url().optional(),
 
+  REDIS_URL: z.string().default('redis://localhost:6379'),
+
   JWT_ACCESS_SECRET: z.string().min(16),
   JWT_REFRESH_SECRET: z.string().min(16),
   JWT_ACCESS_TTL: z.coerce.number().int().positive().default(900),
