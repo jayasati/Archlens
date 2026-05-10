@@ -23,14 +23,16 @@ interface RepoWithLatest {
 type DashboardResult = { kind: 'ok'; rows: RepoWithLatest[] } | { kind: 'error'; message: string };
 
 async function loadDashboard(token: string): Promise<DashboardResult> {
+  // Fetch repos and ALL the user's scans in parallel (was 1 + N calls).
   let repos: RepositoryDto[];
+  let allScans: ScanDto[];
   try {
-    repos = await listReposServer(token);
+    [repos, allScans] = await Promise.all([
+      listReposServer(token),
+      listScansServer(token).catch(() => [] as ScanDto[]),
+    ]);
   } catch (e) {
-    if (e instanceof ApiError && e.status === 401) {
-      // Surfaced upstream by the page so we can redirect to /login.
-      throw e;
-    }
+    if (e instanceof ApiError && e.status === 401) throw e;
     return {
       kind: 'error',
       message:
@@ -42,9 +44,17 @@ async function loadDashboard(token: string): Promise<DashboardResult> {
     };
   }
 
+  const scansByRepo = new Map<string, ScanDto[]>();
+  for (const s of allScans) {
+    const list = scansByRepo.get(s.repoId);
+    if (list) list.push(s);
+    else scansByRepo.set(s.repoId, [s]);
+  }
+
+  // Fetch all needed report summaries in parallel.
   const rows = await Promise.all(
     repos.map(async (repo): Promise<RepoWithLatest> => {
-      const scans = await listScansServer(token, repo.id).catch(() => [] as ScanDto[]);
+      const scans = scansByRepo.get(repo.id) ?? [];
       const latest = scans
         .slice()
         .sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime())[0];

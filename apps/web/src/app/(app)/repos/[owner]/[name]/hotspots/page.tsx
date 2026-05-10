@@ -3,8 +3,7 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { HotspotsView } from '@/components/hotspots/hotspots-view';
 import { getSessionToken } from '@/lib/auth/server';
 import { ApiError } from '@/lib/api/client';
-import { findRepoByOwnerAndName } from '@/lib/api/repos';
-import { listScansServer } from '@/lib/api/scans';
+import { latestCompletedScan, loadRepoContext } from '@/lib/api/repo-loader';
 
 interface PageProps {
   params: { owner: string; name: string };
@@ -15,13 +14,10 @@ export default async function HotspotsPage({ params }: PageProps) {
   if (!token) redirect('/login');
 
   try {
-    const repo = await findRepoByOwnerAndName(token, params.owner, params.name);
-    if (!repo) notFound();
+    const ctx = await loadRepoContext(token, params.owner, params.name);
+    if (!ctx) notFound();
 
-    const scans = await listScansServer(token, repo.id);
-    const completed = scans
-      .filter((s) => s.status === 'completed')
-      .sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime())[0];
+    const completed = latestCompletedScan(ctx.scans);
 
     if (!completed) {
       return (

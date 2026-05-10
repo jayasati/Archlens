@@ -1,3 +1,4 @@
+import { Suspense } from 'react';
 import { notFound, redirect } from 'next/navigation';
 import type { ReportModuleScoreDto, ReportSummaryDto, ScanDto } from '@archlens/shared-types';
 import { ApiError } from '@/lib/api/client';
@@ -12,11 +13,10 @@ import {
 } from '@/components/ui/table';
 import { ScoreCard } from '@/components/score/score-card';
 import { RatingTile } from '@/components/score/rating-tile';
-import { ScoreTrendChart, type ScoreTrendPoint } from '@/components/score/score-trend-chart';
+import { ScoreTrendServer, ScoreTrendSkeleton } from '@/components/score/score-trend-server';
 import { GradeBadge } from '@/components/score/grade-badge';
 import { getSessionToken } from '@/lib/auth/server';
-import { findRepoByOwnerAndName } from '@/lib/api/repos';
-import { listScansServer } from '@/lib/api/scans';
+import { loadRepoContext } from '@/lib/api/repo-loader';
 import { getReportSummaryServer, listReportModulesServer } from '@/lib/api/reports';
 import { RescanButton } from '@/components/scan/rescan-button';
 import { scoreToGrade } from '@/lib/utils/grade';
@@ -27,10 +27,11 @@ interface PageProps {
 }
 
 interface RepoOverviewData {
+  token: string;
   repoId: string;
   summary: ReportSummaryDto | null;
   modules: ReportModuleScoreDto[];
-  trend: ScoreTrendPoint[];
+  completedScans: ScanDto[];
   latestScan: ScanDto | null;
 }
 
@@ -39,43 +40,40 @@ async function loadRepoOverview(
   owner: string,
   name: string
 ): Promise<RepoOverviewData | 'not-found'> {
-  const repo = await findRepoByOwnerAndName(token, owner, name);
-  if (!repo) return 'not-found';
+  const ctx = await loadRepoContext(token, owner, name);
+  if (!ctx) return 'not-found';
 
-  const scans = await listScansServer(token, repo.id);
-  const sorted = scans
-    .slice()
-    .sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
-  const completed = sorted.filter((s) => s.status === 'completed');
-  const latestScan = sorted[0] ?? null;
+  // ctx.scans is already sorted newest-first by the loader.
+  const completed = ctx.scans.filter((s) => s.status === 'completed');
+  const latestScan = ctx.scans[0] ?? null;
   const latestCompleted = completed[0] ?? null;
 
   if (!latestCompleted) {
-    return { repoId: repo.id, summary: null, modules: [], trend: [], latestScan };
+    return {
+      token,
+      repoId: ctx.repo.id,
+      summary: null,
+      modules: [],
+      completedScans: [],
+      latestScan,
+    };
   }
 
+  // Trend is fetched lazily inside <ScoreTrendServer> wrapped in Suspense,
+  // so score card + ratings + modules paint without waiting on it.
   const [summary, modules] = await Promise.all([
     getReportSummaryServer(token, latestCompleted.id),
     listReportModulesServer(token, latestCompleted.id),
   ]);
 
-  const trendCandidates = await Promise.all(
-    completed.slice(0, 10).map(async (s) => {
-      try {
-        const r = await getReportSummaryServer(token, s.id);
-        return {
-          date: new Date(s.createdAt).toLocaleDateString(),
-          score: Math.round(r.scoreBreakdown.overall),
-        } satisfies ScoreTrendPoint;
-      } catch {
-        return null;
-      }
-    })
-  );
-
-  const trend = trendCandidates.filter((p): p is ScoreTrendPoint => p !== null).reverse();
-
-  return { repoId: repo.id, summary, modules, trend, latestScan };
+  return {
+    token,
+    repoId: ctx.repo.id,
+    summary,
+    modules,
+    completedScans: completed,
+    latestScan,
+  };
 }
 
 export default async function RepoOverviewPage({ params }: PageProps) {
@@ -91,7 +89,7 @@ export default async function RepoOverviewPage({ params }: PageProps) {
   }
   if (data === 'not-found') notFound();
 
-  const { repoId, summary, modules, trend, latestScan } = data;
+  const { token: serverToken, repoId, summary, modules, completedScans, latestScan } = data;
 
   if (!summary) {
     return (
@@ -125,7 +123,9 @@ export default async function RepoOverviewPage({ params }: PageProps) {
       <div className="grid grid-cols-1 gap-4 lg:grid-cols-3">
         <ScoreCard score={sb.overall} grade={summary.grade} subtitle="Latest scan" />
         <div className="lg:col-span-2">
-          <ScoreTrendChart data={trend} />
+          <Suspense fallback={<ScoreTrendSkeleton />}>
+            <ScoreTrendServer token={serverToken} completedScans={completedScans} />
+          </Suspense>
         </div>
       </div>
 

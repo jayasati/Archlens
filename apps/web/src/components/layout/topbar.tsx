@@ -1,28 +1,14 @@
-'use client';
-
 import Link from 'next/link';
-import { Search, LogOut } from 'lucide-react';
-import { signOut } from 'next-auth/react';
-import { useQuery } from '@tanstack/react-query';
-import { Button } from '@/components/ui/button';
-import { useAuthToken } from '@/hooks/use-auth-token';
-import { getMe } from '@/lib/api/users';
-import { ApiError } from '@/lib/api/client';
+import { Search } from 'lucide-react';
+import type { UserDto } from '@archlens/shared-types';
+import { TopbarSignOutButton } from './topbar-sign-out';
 
-export function Topbar() {
-  const token = useAuthToken();
-  const { data: user } = useQuery({
-    queryKey: ['me'],
-    queryFn: () => getMe(token),
-    enabled: !!token,
-    retry: (count, err) => {
-      if (err instanceof ApiError && err.status === 401) return false;
-      return count < 1;
-    },
-    staleTime: 60_000,
-  });
+interface TopbarProps {
+  user: UserDto | null;
+}
 
-  const userName = user?.name ?? user?.githubUsername ?? user?.email ?? 'Account';
+export function Topbar({ user }: TopbarProps) {
+  const name = user?.name ?? user?.githubUsername ?? user?.email ?? 'Account';
 
   return (
     <header
@@ -39,11 +25,9 @@ export function Topbar() {
           className="text-sm text-muted-foreground hover:text-foreground"
           data-testid="topbar-username"
         >
-          {userName}
+          {name}
         </Link>
-        <Button variant="ghost" size="sm" onClick={() => signOut({ callbackUrl: '/' })}>
-          <LogOut className="mr-2 h-4 w-4" /> Sign out
-        </Button>
+        <TopbarSignOutButton />
       </div>
     </header>
   );

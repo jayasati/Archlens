@@ -9,8 +9,16 @@ export function QueryProvider({ children }: { children: ReactNode }) {
       new QueryClient({
         defaultOptions: {
           queries: {
-            staleTime: 30_000,
+            // 5 minutes "fresh" — enough that nav between pages doesn't
+            // refetch the same data; short enough that scan completion still
+            // feels responsive after we explicitly invalidate.
+            staleTime: 5 * 60 * 1000,
+            // Keep cached data around for 30 minutes after last use, so
+            // back/forward navigation paints from cache instantly.
+            gcTime: 30 * 60 * 1000,
             refetchOnWindowFocus: false,
+            refetchOnMount: false,
+            retry: 1,
           },
         },
       })

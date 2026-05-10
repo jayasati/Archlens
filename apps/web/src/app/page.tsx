@@ -3,6 +3,8 @@ import { GitBranch } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { SignInWithGitHubButton } from '@/components/auth/sign-in-button';
 
+export const dynamic = 'force-static';
+
 export default function LandingPage() {
   return (
     <main className="flex min-h-screen flex-col">
