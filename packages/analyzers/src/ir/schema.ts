@@ -1,0 +1,16 @@
+export {
+  RepoSchema,
+  ModuleSchema,
+  FileSchema,
+  ClassSchema,
+  MethodSchema,
+  FunctionSchema,
+  SmellSchema,
+  EdgeSchema,
+  EdgeKindSchema,
+  ScoreBreakdownSchema,
+  GradeSchema,
+  SeveritySchema,
+  LanguageSchema,
+  LocationSchema,
+} from '@archlens/ir-schema';

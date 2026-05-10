@@ -12,11 +12,29 @@
       "default": "./dist/index.js"
     }
   },
+  "bin": {
+    "archlens-analyze": "./dist/cli.js"
+  },
   "scripts": {
-    "build": "tsc -b",
+    "build": "tsc -b && node ./scripts/link-bin.cjs",
     "lint": "eslint . --no-error-on-unmatched-pattern",
-    "test": "echo \"no tests yet\" && exit 0",
+    "test": "vitest run",
+    "test:watch": "vitest",
     "typecheck": "tsc --noEmit",
+    "analyze": "node ./dist/cli.js",
     "clean": "rimraf dist .turbo *.tsbuildinfo"
+  },
+  "dependencies": {
+    "@archlens/ir-schema": "workspace:*",
+    "@archlens/shared-types": "workspace:*",
+    "commander": "^13.0.0",
+    "graphology": "^0.26.0",
+    "graphology-types": "^0.24.7",
+    "tree-sitter-wasms": "^0.1.12",
+    "web-tree-sitter": "^0.21.0"
+  },
+  "devDependencies": {
+    "@types/node": "^20.14.0",
+    "vitest": "^2.1.8"
   }
 }
