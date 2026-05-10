@@ -1,0 +1,22 @@
+{
+  "name": "@archlens/ir-schema",
+  "version": "0.0.0",
+  "private": true,
+  "description": "JSON-Schema/Zod for the Intermediate Representation — single source of truth",
+  "main": "dist/index.js",
+  "types": "dist/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js",
+      "default": "./dist/index.js"
+    }
+  },
+  "scripts": {
+    "build": "tsc -b",
+    "lint": "eslint . --no-error-on-unmatched-pattern",
+    "test": "echo \"no tests yet\" && exit 0",
+    "typecheck": "tsc --noEmit",
+    "clean": "rimraf dist .turbo *.tsbuildinfo"
+  }
+}

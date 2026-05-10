@@ -1,0 +1,66 @@
+# Dependencies
+node_modules/
+.pnpm-store/
+
+# Build outputs
+dist/
+build/
+.next/
+out/
+*.tsbuildinfo
+
+# Turborepo
+.turbo/
+
+# Coverage
+coverage/
+*.lcov
+.nyc_output/
+
+# Env
+.env
+.env.local
+.env.*.local
+
+# Logs
+logs/
+*.log
+npm-debug.log*
+pnpm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+
+# IDE
+.vscode/
+!.vscode/settings.json
+!.vscode/extensions.json
+.idea/
+*.swp
+*.swo
+
+# OS
+.DS_Store
+Thumbs.db
+desktop.ini
+
+# Misc
+*.pid
+*.seed
+.cache/
+.parcel-cache/
+
+# Prisma
+prisma/migrations/dev.db*
+
+# Next.js
+.vercel
+
+# Tooling
+.eslintcache
+.stylelintcache
+
+
+.claude
+architecture
+claude-decision
+promptchain

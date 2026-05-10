@@ -1,0 +1,13 @@
+{
+  "name": "@archlens/web",
+  "version": "0.0.0",
+  "private": true,
+  "description": "Archlens Next.js frontend",
+  "scripts": {
+    "build": "tsc -b",
+    "lint": "eslint . --no-error-on-unmatched-pattern",
+    "test": "echo \"no tests yet\" && exit 0",
+    "typecheck": "tsc --noEmit",
+    "clean": "rimraf dist .next .turbo *.tsbuildinfo"
+  }
+}
