@@ -25,6 +25,7 @@
     "schema": "prisma/schema.prisma"
   },
   "dependencies": {
+    "@archlens/ir-schema": "workspace:*",
     "@archlens/shared-types": "workspace:*",
     "@nestjs/common": "^10.4.15",
     "@nestjs/config": "^3.3.0",

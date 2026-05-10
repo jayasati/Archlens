@@ -50,6 +50,9 @@ importers:
 
   apps/api:
     dependencies:
+      '@archlens/ir-schema':
+        specifier: workspace:*
+        version: link:../../packages/ir-schema
       '@archlens/shared-types':
         specifier: workspace:*
         version: link:../../packages/shared-types

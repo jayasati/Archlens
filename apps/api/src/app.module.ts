@@ -16,6 +16,9 @@ import { AuthModule } from './modules/auth/auth.module';
 import { UsersModule } from './modules/users/users.module';
 import { RepositoriesModule } from './modules/repositories/repositories.module';
 import { ScansModule } from './modules/scans/scans.module';
+import { ReportsModule } from './modules/reports/reports.module';
+import { ArchitectureModule } from './modules/architecture/architecture.module';
+import { HotspotsModule } from './modules/hotspots/hotspots.module';
 import { HealthModule } from './modules/health/health.module';
 
 @Module({
@@ -32,6 +35,9 @@ import { HealthModule } from './modules/health/health.module';
     UsersModule,
     RepositoriesModule,
     ScansModule,
+    ReportsModule,
+    ArchitectureModule,
+    HotspotsModule,
     HealthModule,
   ],
   providers: [

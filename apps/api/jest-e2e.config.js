@@ -16,6 +16,8 @@ module.exports = {
   moduleNameMapper: {
     '^@archlens/shared-types$': '<rootDir>/../../packages/shared-types/src/index.ts',
     '^@archlens/shared-types/(.*)$': '<rootDir>/../../packages/shared-types/src/$1',
+    '^@archlens/ir-schema$': '<rootDir>/../../packages/ir-schema/src/index.ts',
+    '^@archlens/ir-schema/(.*)$': '<rootDir>/../../packages/ir-schema/src/$1',
   },
   setupFilesAfterEnv: ['<rootDir>/test/jest-e2e.setup.ts'],
   testTimeout: 30000,
