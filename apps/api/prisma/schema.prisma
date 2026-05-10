@@ -1,0 +1,63 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider  = "postgresql"
+  url       = env("DATABASE_URL")
+  directUrl = env("DIRECT_DATABASE_URL")
+}
+
+model User {
+  id             String   @id @default(uuid()) @db.Uuid
+  email          String?  @unique
+  name           String?
+  avatarUrl      String?
+  githubUsername String?  @unique
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+
+  accounts     Account[]
+  repositories Repository[]
+
+  @@map("users")
+}
+
+model Account {
+  id                String   @id @default(uuid()) @db.Uuid
+  userId            String   @db.Uuid
+  provider          String
+  providerAccountId String
+  accessToken       String?
+  refreshToken      String?
+  scope             String?
+  tokenType         String?
+  createdAt         DateTime @default(now())
+  updatedAt         DateTime @updatedAt
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([provider, providerAccountId])
+  @@index([userId])
+  @@map("accounts")
+}
+
+model Repository {
+  id            String   @id @default(uuid()) @db.Uuid
+  userId        String   @db.Uuid
+  provider      String   @default("github")
+  owner         String
+  name          String
+  fullName      String
+  defaultBranch String   @default("main")
+  private       Boolean  @default(false)
+  htmlUrl       String?
+  connectedAt   DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, provider, fullName])
+  @@index([userId])
+  @@map("repositories")
+}

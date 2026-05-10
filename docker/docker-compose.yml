@@ -1,0 +1,21 @@
+services:
+  postgres:
+    image: postgres:16-alpine
+    container_name: archlens-postgres
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: archlens
+      POSTGRES_PASSWORD: archlens
+      POSTGRES_DB: archlens
+    ports:
+      - '5433:5432'
+    volumes:
+      - archlens-postgres-data:/var/lib/postgresql/data
+    healthcheck:
+      test: ['CMD-SHELL', 'pg_isready -U archlens -d archlens']
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+volumes:
+  archlens-postgres-data:
