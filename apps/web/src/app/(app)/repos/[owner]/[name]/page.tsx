@@ -17,6 +17,7 @@ import { getSessionToken } from '@/lib/auth/server';
 import { findRepoByOwnerAndName } from '@/lib/api/repos';
 import { listScansServer } from '@/lib/api/scans';
 import { getReportSummaryServer, listReportModulesServer } from '@/lib/api/reports';
+import { RescanButton } from '@/components/scan/rescan-button';
 import { scoreToGrade } from '@/lib/utils/grade';
 import { formatScore } from '@/lib/utils/format';
 
@@ -25,6 +26,7 @@ interface PageProps {
 }
 
 interface RepoOverviewData {
+  repoId: string;
   summary: ReportSummaryDto | null;
   modules: ReportModuleScoreDto[];
   trend: ScoreTrendPoint[];
@@ -48,7 +50,7 @@ async function loadRepoOverview(
   const latestCompleted = completed[0] ?? null;
 
   if (!latestCompleted) {
-    return { summary: null, modules: [], trend: [], latestScan };
+    return { repoId: repo.id, summary: null, modules: [], trend: [], latestScan };
   }
 
   const [summary, modules] = await Promise.all([
@@ -72,7 +74,7 @@ async function loadRepoOverview(
 
   const trend = trendCandidates.filter((p): p is ScoreTrendPoint => p !== null).reverse();
 
-  return { summary, modules, trend, latestScan };
+  return { repoId: repo.id, summary, modules, trend, latestScan };
 }
 
 export default async function RepoOverviewPage({ params }: PageProps) {
@@ -82,26 +84,29 @@ export default async function RepoOverviewPage({ params }: PageProps) {
   const data = await loadRepoOverview(token, params.owner, params.name);
   if (data === 'not-found') notFound();
 
-  const { summary, modules, trend, latestScan } = data;
+  const { repoId, summary, modules, trend, latestScan } = data;
 
   if (!summary) {
     return (
-      <Card>
-        <CardHeader>
-          <CardTitle>No completed scan yet</CardTitle>
-        </CardHeader>
-        <CardContent>
-          {latestScan ? (
-            <p className="text-sm text-muted-foreground">
-              The most recent scan is currently <strong>{latestScan.status}</strong>.
-            </p>
-          ) : (
-            <p className="text-sm text-muted-foreground">
-              Trigger a scan to see scores for this repository.
-            </p>
-          )}
-        </CardContent>
-      </Card>
+      <div className="space-y-4" data-testid="repo-overview-empty">
+        <RescanButton repoId={repoId} />
+        <Card>
+          <CardHeader>
+            <CardTitle>No completed scan yet</CardTitle>
+          </CardHeader>
+          <CardContent>
+            {latestScan ? (
+              <p className="text-sm text-muted-foreground">
+                The most recent scan is currently <strong>{latestScan.status}</strong>.
+              </p>
+            ) : (
+              <p className="text-sm text-muted-foreground">
+                Click <strong>Re-scan</strong> above to generate the first report.
+              </p>
+            )}
+          </CardContent>
+        </Card>
+      </div>
     );
   }
 
@@ -109,6 +114,7 @@ export default async function RepoOverviewPage({ params }: PageProps) {
 
   return (
     <div className="space-y-6" data-testid="repo-overview">
+      <RescanButton repoId={repoId} />
       <div className="grid grid-cols-1 gap-4 lg:grid-cols-3">
         <ScoreCard score={sb.overall} grade={summary.grade} subtitle="Latest scan" />
         <div className="lg:col-span-2">
