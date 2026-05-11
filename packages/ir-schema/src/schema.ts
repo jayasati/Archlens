@@ -63,6 +63,7 @@ export const ClassSchema = z.object({
   fanOut: NonNegInt.default(0),
   methods: z.array(MethodSchema).default([]),
   smells: z.array(SmellSchema).default([]),
+  tags: z.array(z.string()).default([]),
 });
 
 export const FileSchema = z.object({
@@ -80,6 +81,7 @@ export const ModuleSchema = z.object({
   name: z.string().min(1),
   virtual: z.boolean().default(false),
   files: z.array(FileSchema).default([]),
+  tags: z.array(z.string()).default([]),
 });
 
 export const EdgeSchema = z.object({

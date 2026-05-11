@@ -5,7 +5,15 @@ export type {
   SmellThresholds,
 } from './adapters/adapter.interface.js';
 export { PythonAdapter } from './adapters/python/python.adapter.js';
-export { computeComplexity, type FunctionComplexity } from './metrics/complexity.js';
+export { NodeAdapter } from './adapters/node/node.adapter.js';
+export { analyzeRepo, detectLanguages, mergeIRs, type OrchestratorConfig } from './orchestrator.js';
+export {
+  computeComplexity,
+  type FunctionComplexity,
+  type ComplexityConfig,
+  PYTHON_COMPLEXITY,
+  NODE_COMPLEXITY,
+} from './metrics/complexity.js';
 export { countLoc } from './metrics/size.js';
 export { computeCoupling, type CouplingResult } from './metrics/coupling.js';
 export { detectGodClass } from './metrics/smells/god-class.js';
@@ -22,6 +30,7 @@ export {
   mergeThresholds,
 } from './scoring/weights.default.js';
 export { buildMermaidModuleGraph } from './diagrams/module-graph.builder.js';
+export { buildMermaidLayerDiagram } from './diagrams/layer-diagram.builder.js';
 export { parsePythonSource } from './adapters/python/ast-walker.js';
 export {
   pathToDotted,
@@ -29,3 +38,36 @@ export {
   buildModuleIndex,
   topPackage,
 } from './adapters/python/import-resolver.js';
+export {
+  parseNodeSource,
+  parseNodeFileByPath,
+  type ParsedFile as NodeParsedFile,
+  type ParsedClass as NodeParsedClass,
+  type ParsedFunction as NodeParsedFunction,
+  type ParsedImport as NodeParsedImport,
+} from './adapters/node/ast-walker.js';
+export {
+  loadTsconfig,
+  buildNodeFileIndex,
+  resolveNodeImport,
+  type TsconfigPaths,
+  type NodeFileIndex,
+} from './adapters/node/tsconfig-resolver.js';
+export {
+  classifyNestClass,
+  moduleTagsFromClasses,
+  fileLooksLikeNest,
+  type NestLayer,
+  type NestClassInfo,
+} from './adapters/node/frameworks/nestjs.js';
+export {
+  fileLooksLikeExpress,
+  extractExpressRoutes,
+  type ExpressRoute,
+} from './adapters/node/frameworks/express.js';
+export {
+  fileLooksLikeNext,
+  extractNextRoute,
+  type NextRoute,
+  type NextRouterKind,
+} from './adapters/node/frameworks/nextjs.js';

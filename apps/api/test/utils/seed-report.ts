@@ -24,6 +24,7 @@ export const FIXTURE_IR: Repo = {
       id: 'mod-core',
       name: 'core',
       virtual: false,
+      tags: [],
       files: [
         {
           id: 'file-core-index',
@@ -86,6 +87,7 @@ export const FIXTURE_IR: Repo = {
                 },
               ],
               smells: [],
+              tags: [],
             },
           ],
           functions: [],
@@ -97,6 +99,7 @@ export const FIXTURE_IR: Repo = {
       id: 'mod-web',
       name: 'web',
       virtual: false,
+      tags: [],
       files: [
         {
           id: 'file-web-app',
