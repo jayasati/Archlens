@@ -12,5 +12,5 @@
     "types": ["node"]
   },
   "include": ["src/**/*", "test/**/*", "vitest.config.ts"],
-  "exclude": ["node_modules", "dist", "build", "coverage", "test/fixtures/**"]
+  "exclude": ["node_modules", "dist", "build", "coverage", "test/fixtures/**", "../../tools/**"]
 }

@@ -59,6 +59,10 @@ prisma/migrations/dev.db*
 .eslintcache
 .stylelintcache
 
+# Portable Maven (developer toolchain, not source)
+tools/.maven/
+tools/parser-jars/javaparser-runner/target/
+
 
 .claude
 architecture

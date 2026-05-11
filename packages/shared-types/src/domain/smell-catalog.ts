@@ -132,6 +132,41 @@ export const SMELL_CATALOG: ReadonlyArray<SmellDefinitionDto> = [
       },
     ],
   },
+  {
+    ruleId: 'spring-layer-skip',
+    kind: 'spring-layer-skip',
+    name: 'Spring layer skip',
+    shortDescription: 'Controller depends directly on a repository, skipping the service layer.',
+    description:
+      'In a layered Spring architecture, controllers should delegate to services, ' +
+      'which own the business logic and call into repositories. A controller (or ' +
+      'generic @Component) that injects a @Repository directly bypasses the ' +
+      'service layer, making it hard to add transactional boundaries, caching, or ' +
+      'authorization checks later.',
+    category: 'design',
+    defaultSeverity: 'major',
+    languages: ['java'],
+    remediation:
+      'Introduce or extend a service class that wraps the repository call. ' +
+      'Inject the service into the controller instead.',
+  },
+  {
+    ruleId: 'spring-service-cycle',
+    kind: 'spring-service-cycle',
+    name: 'Spring service cycle',
+    shortDescription: 'Two or more @Service beans inject each other forming a dependency cycle.',
+    description:
+      'Cyclic dependencies between services indicate that responsibilities are ' +
+      'split poorly: each service half-owns work that should live together, or a ' +
+      'shared collaborator needs to be extracted. Spring will start the cycle ' +
+      "(thanks to setter / field injection), but it's a smell, not a feature.",
+    category: 'coupling',
+    defaultSeverity: 'major',
+    languages: ['java'],
+    remediation:
+      'Extract the shared logic into a third service that both depend on, or ' +
+      'merge the two services if their responsibilities truly are intertwined.',
+  },
 ] as const;
 
 /**

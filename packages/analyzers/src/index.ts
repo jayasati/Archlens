@@ -6,6 +6,34 @@ export type {
 } from './adapters/adapter.interface.js';
 export { PythonAdapter } from './adapters/python/python.adapter.js';
 export { NodeAdapter } from './adapters/node/node.adapter.js';
+export { JavaAdapter, type JavaAdapterOptions } from './adapters/java/java.adapter.js';
+export {
+  runJavaParserRunner,
+  resolveBundledJarPath,
+  probeJava,
+  JavaNotAvailableError,
+  JavaParserRunnerError,
+  type JavaParserOutput,
+  type JavaParserRunnerOptions,
+} from './adapters/java/runners/javaparser.runner.js';
+export {
+  classifySpringClass,
+  moduleTagsFromSpringClasses,
+  fileLooksLikeSpring,
+  type SpringLayer,
+  type SpringClassInfo,
+} from './adapters/java/spring/layer-detector.js';
+export {
+  buildBeanGraph,
+  type BeanGraph,
+  type BeanNode,
+  type BeanEdge,
+} from './adapters/java/spring/bean-graph.js';
+export {
+  applySpringRules,
+  type SpringRuleSmell,
+  type SpringRulesResult,
+} from './adapters/java/spring/spring-rules.js';
 export { analyzeRepo, detectLanguages, mergeIRs, type OrchestratorConfig } from './orchestrator.js';
 export {
   computeComplexity,

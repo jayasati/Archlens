@@ -5,6 +5,7 @@ import { IR_VERSION } from './ir/types.js';
 import type { Adapter, AnalyzerConfig } from './adapters/adapter.interface.js';
 import { PythonAdapter } from './adapters/python/python.adapter.js';
 import { NodeAdapter } from './adapters/node/node.adapter.js';
+import { JavaAdapter } from './adapters/java/java.adapter.js';
 import { computeCoupling } from './metrics/coupling.js';
 import { computeScores } from './scoring/engine.js';
 import { mergeWeights } from './scoring/weights.default.js';
@@ -22,6 +23,7 @@ const EXT_TO_LANGUAGE: Record<string, Language> = {
   '.jsx': 'javascript',
   '.mjs': 'javascript',
   '.cjs': 'javascript',
+  '.java': 'java',
 };
 
 const SKIP_DIRS = new Set([
@@ -78,6 +80,7 @@ function adaptersFor(languages: Language[]): Adapter[] {
   const adapters: Adapter[] = [];
   if (set.has('python')) adapters.push(new PythonAdapter());
   if (set.has('typescript') || set.has('javascript')) adapters.push(new NodeAdapter());
+  if (set.has('java')) adapters.push(new JavaAdapter());
   return adapters;
 }
 
