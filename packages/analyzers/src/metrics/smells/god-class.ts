@@ -1,4 +1,7 @@
+import { smellRule } from '@archlens/shared-types';
 import type { Smell } from '../../ir/types.js';
+
+const RULE = smellRule('god-class');
 
 export interface GodClassInput {
   filePath: string;
@@ -31,8 +34,8 @@ export function detectGodClass(cls: GodClassInput, thresholds: GodClassThreshold
 
   return {
     id: `smell_god_class_${++counter}`,
-    kind: 'god-class',
-    ruleId: 'god-class',
+    kind: RULE.kind,
+    ruleId: RULE.ruleId,
     severity,
     message: `Class ${cls.name} looks like a god class: ${reasons.join(', ')}`,
     file: cls.filePath,

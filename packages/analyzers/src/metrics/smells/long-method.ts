@@ -1,4 +1,7 @@
+import { smellRule } from '@archlens/shared-types';
 import type { Smell } from '../../ir/types.js';
+
+const RULE = smellRule('long-method');
 
 export interface LongMethodInput {
   filePath: string;
@@ -35,8 +38,8 @@ export function detectLongMethod(
   const owner = fn.className ? `${fn.className}.${fn.name}` : fn.name;
   return {
     id: `smell_long_method_${++counter}`,
-    kind: 'long-method',
-    ruleId: 'long-method',
+    kind: RULE.kind,
+    ruleId: RULE.ruleId,
     severity,
     message: `Method ${owner} is too long: ${reasons.join(', ')}`,
     file: fn.filePath,

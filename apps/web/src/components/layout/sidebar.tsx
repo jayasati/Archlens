@@ -2,7 +2,7 @@
 
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
-import { LayoutDashboard, Plug, User } from 'lucide-react';
+import { Bug, LayoutDashboard, Plug, User } from 'lucide-react';
 import { cn } from '@/lib/utils/cn';
 
 const items: ReadonlyArray<{
@@ -16,6 +16,12 @@ const items: ReadonlyArray<{
     label: 'Dashboard',
     icon: LayoutDashboard,
     match: (p) => p === '/dashboard' || p.startsWith('/repos/'),
+  },
+  {
+    href: '/smells',
+    label: 'Smells',
+    icon: Bug,
+    match: (p) => p.startsWith('/smells'),
   },
   {
     href: '/integrations',

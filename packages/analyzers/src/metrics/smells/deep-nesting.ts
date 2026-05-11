@@ -1,4 +1,7 @@
+import { smellRule } from '@archlens/shared-types';
 import type { Smell } from '../../ir/types.js';
+
+const RULE = smellRule('deep-nesting');
 
 export interface DeepNestingInput {
   filePath: string;
@@ -26,8 +29,8 @@ export function detectDeepNesting(
     fn.maxNestingDepth >= thresholds.depth + 2 ? 'major' : 'minor';
   return {
     id: `smell_deep_nesting_${++counter}`,
-    kind: 'deep-nesting',
-    ruleId: 'deep-nesting',
+    kind: RULE.kind,
+    ruleId: RULE.ruleId,
     severity,
     message: `Method ${owner} has nesting depth ${fn.maxNestingDepth} (>= ${thresholds.depth})`,
     file: fn.filePath,
