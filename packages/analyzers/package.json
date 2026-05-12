@@ -30,6 +30,8 @@
     "commander": "^13.0.0",
     "graphology": "^0.26.0",
     "graphology-types": "^0.24.7",
+    "@jscpd/core": "^4.1.1",
+    "jscpd": "^4.1.1",
     "tree-sitter-wasms": "^0.1.12",
     "web-tree-sitter": "^0.21.0"
   },

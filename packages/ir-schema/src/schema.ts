@@ -34,6 +34,7 @@ export const SmellSchema = z.object({
   message: z.string().min(1),
   file: z.string().min(1),
   location: LocationSchema.optional(),
+  cloneGroupId: z.string().min(1).optional(),
 });
 
 export const MethodSchema = z.object({

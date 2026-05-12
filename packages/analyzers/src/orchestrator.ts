@@ -1,12 +1,13 @@
 import { promises as fs } from 'node:fs';
 import path from 'node:path';
-import type { Edge, Language, Module, Repo, Smell } from './ir/types.js';
+import type { Edge, FileIR, Language, Module, Repo, Severity, Smell } from './ir/types.js';
 import { IR_VERSION } from './ir/types.js';
 import type { Adapter, AnalyzerConfig } from './adapters/adapter.interface.js';
 import { PythonAdapter } from './adapters/python/python.adapter.js';
 import { NodeAdapter } from './adapters/node/node.adapter.js';
 import { JavaAdapter } from './adapters/java/java.adapter.js';
 import { computeCoupling } from './metrics/coupling.js';
+import { detectDuplication, type DuplicationResult } from './metrics/duplication.js';
 import { computeScores } from './scoring/engine.js';
 import { mergeThresholds, mergeWeights } from './scoring/weights.default.js';
 import { scoreToGrade } from './scoring/grading.js';
@@ -75,15 +76,76 @@ export async function analyzeRepo(
     throw new Error(`No adapter available for languages: ${languages.join(', ')}`);
   }
 
-  if (adapters.length === 1) {
-    return adapters[0]!.analyze(absRepo, config);
-  }
-
   const irs: Repo[] = [];
   for (const adapter of adapters) {
     irs.push(await adapter.analyze(absRepo, config));
   }
-  return mergeIRs(irs, absRepo, config);
+
+  // Cross-language duplication runs once per scan; the result is folded into
+  // the merge step. Skippable via config for fast scans.
+  let duplication: DuplicationResult | null = null;
+  if (!config.skipDuplication) {
+    const totalLoc = irs.reduce((sum, ir) => sum + sumIrLoc(ir), 0);
+    duplication = await detectDuplication(absRepo, {
+      excludeDirs: Array.from(SKIP_DIRS),
+      totalLoc,
+    });
+  }
+
+  return mergeIRs(irs, absRepo, config, duplication);
+}
+
+function sumIrLoc(ir: Repo): number {
+  let total = 0;
+  for (const mod of ir.modules) for (const file of mod.files) total += file.loc;
+  return total;
+}
+
+const DUPLICATE_RULE_ID = 'duplicate_code';
+
+function severityForCloneLines(lines: number): Severity {
+  if (lines >= 50) return 'critical';
+  if (lines >= 30) return 'major';
+  if (lines >= 15) return 'minor';
+  return 'info';
+}
+
+/**
+ * Attach a smell to every file participating in a duplication. One smell per
+ * file per clone group, cross-linked by `cloneGroupId`. Clones whose source
+ * isn't in the merged IR (e.g. files excluded by an adapter) are silently
+ * dropped — the metric ratio still reflects them.
+ */
+function injectDuplicationSmells(modules: Module[], duplication: DuplicationResult): Smell[] {
+  if (duplication.clones.length === 0) return [];
+  const filesByPath = new Map<string, FileIR>();
+  for (const mod of modules) for (const file of mod.files) filesByPath.set(file.path, file);
+
+  const added: Smell[] = [];
+  let smellCounter = 0;
+  for (const clone of duplication.clones) {
+    const severity = severityForCloneLines(clone.lines);
+    for (let i = 0; i < clone.locations.length; i++) {
+      const here = clone.locations[i]!;
+      const other = clone.locations[1 - i]!;
+      const file = filesByPath.get(here.file);
+      if (!file) continue;
+      smellCounter += 1;
+      const smell: Smell = {
+        id: `smell_dup_${smellCounter}`,
+        kind: DUPLICATE_RULE_ID,
+        ruleId: DUPLICATE_RULE_ID,
+        severity,
+        message: `${clone.lines} lines duplicated with ${other.file}:${other.startLine}-${other.endLine}`,
+        file: here.file,
+        location: { startLine: here.startLine, endLine: here.endLine },
+        cloneGroupId: clone.groupId,
+      };
+      file.smells.push(smell);
+      added.push(smell);
+    }
+  }
+  return added;
 }
 
 function adaptersFor(languages: Language[]): Adapter[] {
@@ -137,9 +199,17 @@ export async function detectLanguages(
  * ship duplicate rows and `buildModuleGraph` doesn't silently collapse them
  * into one node (graphology dedupes by ID).
  */
-export function mergeIRs(irs: Repo[], repoPath: string, config: AnalyzerConfig): Repo {
+export function mergeIRs(
+  irs: Repo[],
+  repoPath: string,
+  config: AnalyzerConfig,
+  duplication: DuplicationResult | null = null
+): Repo {
   if (irs.length === 0) throw new Error('mergeIRs called with no IRs');
-  if (irs.length === 1) return irs[0]!;
+  // Single-IR path: only takes the fast lane when there's no duplication signal
+  // to fold in. Otherwise drop through to the unified merge so the clone
+  // smells and duplicationRatio reach the scorer.
+  if (irs.length === 1 && !duplication) return irs[0]!;
 
   const disambiguated = disambiguateModuleIds(irs);
 
@@ -204,6 +274,11 @@ export function mergeIRs(irs: Repo[], repoPath: string, config: AnalyzerConfig):
   const fanOutTotal = fanOutValues.reduce((a, b) => a + b, 0);
   const fanOutMax = fanOutValues.length > 0 ? Math.max(...fanOutValues) : 0;
 
+  if (duplication) {
+    const dupSmells = injectDuplicationSmells(modules, duplication);
+    allSmells.push(...dupSmells);
+  }
+
   const scores = computeScores(
     {
       totalLoc,
@@ -218,6 +293,7 @@ export function mergeIRs(irs: Repo[], repoPath: string, config: AnalyzerConfig):
       hotSpotExcess,
       cohesionWeighted,
       moduleLocSum,
+      duplicationRatio: duplication?.ratio,
       smells: allSmells,
     },
     mergeWeights(config.weights)
