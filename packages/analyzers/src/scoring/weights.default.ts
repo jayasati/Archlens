@@ -1,10 +1,10 @@
 import type { AnalyzerWeights, SmellThresholds } from '../adapters/adapter.interface.js';
 
 export const DEFAULT_WEIGHTS: AnalyzerWeights = {
-  complexity: 0.3,
-  duplication: 0.1,
-  coupling: 0.25,
-  cohesion: 0.15,
+  complexity: 0.4,
+  duplication: 0,
+  coupling: 0.4,
+  cohesion: 0,
   smells: 0.2,
 };
 

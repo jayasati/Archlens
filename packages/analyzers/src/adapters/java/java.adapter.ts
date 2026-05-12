@@ -88,6 +88,8 @@ function transformRunnerOutput(
   let totalFunctions = 0;
   let totalClasses = 0;
   let totalComplexity = 0;
+  let hotSpotCount = 0;
+  let hotSpotExcess = 0;
 
   // Pre-classify every class so the bean graph and the IR pass agree on
   // which classes count as beans.
@@ -133,6 +135,10 @@ function transformRunnerOutput(
         const methodSmells: Smell[] = [];
         totalFunctions += 1;
         totalComplexity += m.cyclomatic;
+        if (m.cyclomatic > thresholds.longMethodComplexity) {
+          hotSpotCount += 1;
+          hotSpotExcess += m.cyclomatic - thresholds.longMethodComplexity;
+        }
 
         const longSmell = detectLongMethod(
           {
@@ -252,7 +258,9 @@ function transformRunnerOutput(
   const graph = buildModuleGraph(moduleIds, aggregatedEdges);
   const cycles = detectCycles(graph);
   const coupling = computeCoupling(aggregatedEdges);
-  const fanOutTotal = Array.from(coupling.fanOut.values()).reduce((a, b) => a + b, 0);
+  const fanOutValues = Array.from(coupling.fanOut.values());
+  const fanOutTotal = fanOutValues.reduce((a, b) => a + b, 0);
+  const fanOutMax = fanOutValues.length > 0 ? Math.max(...fanOutValues) : 0;
 
   const scores = computeScores(
     {
@@ -263,6 +271,9 @@ function transformRunnerOutput(
       cycleCount: cycles.length,
       moduleCount: modules.length,
       fanOutTotal,
+      fanOutMax,
+      hotSpotCount,
+      hotSpotExcess,
       smells: allSmells,
     },
     weights

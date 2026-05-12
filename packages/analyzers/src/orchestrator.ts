@@ -8,7 +8,7 @@ import { NodeAdapter } from './adapters/node/node.adapter.js';
 import { JavaAdapter } from './adapters/java/java.adapter.js';
 import { computeCoupling } from './metrics/coupling.js';
 import { computeScores } from './scoring/engine.js';
-import { mergeWeights } from './scoring/weights.default.js';
+import { mergeThresholds, mergeWeights } from './scoring/weights.default.js';
 import { scoreToGrade } from './scoring/grading.js';
 import { buildModuleGraph } from './graph/graph-builder.js';
 import { detectCycles } from './graph/cycle-detector.js';
@@ -143,6 +143,7 @@ export function mergeIRs(irs: Repo[], repoPath: string, config: AnalyzerConfig):
 
   const disambiguated = disambiguateModuleIds(irs);
 
+  const thresholds = mergeThresholds(config.thresholds);
   const modules: Module[] = [];
   const edges: Edge[] = [];
   const languages = new Set<Language>();
@@ -151,6 +152,8 @@ export function mergeIRs(irs: Repo[], repoPath: string, config: AnalyzerConfig):
   let totalFunctions = 0;
   let totalClasses = 0;
   let totalComplexity = 0;
+  let hotSpotCount = 0;
+  let hotSpotExcess = 0;
 
   for (const ir of disambiguated) {
     for (const lang of ir.languages) languages.add(lang);
@@ -161,6 +164,10 @@ export function mergeIRs(irs: Repo[], repoPath: string, config: AnalyzerConfig):
         for (const fn of file.functions) {
           totalFunctions += 1;
           totalComplexity += fn.complexity;
+          if (fn.complexity > thresholds.longMethodComplexity) {
+            hotSpotCount += 1;
+            hotSpotExcess += fn.complexity - thresholds.longMethodComplexity;
+          }
           allSmells.push(...fn.smells);
         }
         for (const cls of file.classes) {
@@ -168,6 +175,10 @@ export function mergeIRs(irs: Repo[], repoPath: string, config: AnalyzerConfig):
           for (const m of cls.methods) {
             totalFunctions += 1;
             totalComplexity += m.complexity;
+            if (m.complexity > thresholds.longMethodComplexity) {
+              hotSpotCount += 1;
+              hotSpotExcess += m.complexity - thresholds.longMethodComplexity;
+            }
             allSmells.push(...m.smells);
           }
           allSmells.push(...cls.smells);
@@ -182,7 +193,9 @@ export function mergeIRs(irs: Repo[], repoPath: string, config: AnalyzerConfig):
   const graph = buildModuleGraph(moduleIds, edges);
   const cycles = detectCycles(graph);
   const coupling = computeCoupling(edges);
-  const fanOutTotal = Array.from(coupling.fanOut.values()).reduce((a, b) => a + b, 0);
+  const fanOutValues = Array.from(coupling.fanOut.values());
+  const fanOutTotal = fanOutValues.reduce((a, b) => a + b, 0);
+  const fanOutMax = fanOutValues.length > 0 ? Math.max(...fanOutValues) : 0;
 
   const scores = computeScores(
     {
@@ -193,6 +206,9 @@ export function mergeIRs(irs: Repo[], repoPath: string, config: AnalyzerConfig):
       cycleCount: cycles.length,
       moduleCount: modules.length,
       fanOutTotal,
+      fanOutMax,
+      hotSpotCount,
+      hotSpotExcess,
       smells: allSmells,
     },
     mergeWeights(config.weights)

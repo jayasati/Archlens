@@ -77,6 +77,8 @@ export class PythonAdapter implements Adapter {
     let totalFunctions = 0;
     let totalClasses = 0;
     let totalComplexity = 0;
+    let hotSpotCount = 0;
+    let hotSpotExcess = 0;
     const allSmells: Smell[] = [];
 
     for (const parsed of parsedFiles) {
@@ -100,6 +102,10 @@ export class PythonAdapter implements Adapter {
         const cmplx = computeComplexity(fn.bodyNode);
         totalFunctions += 1;
         totalComplexity += cmplx.cyclomatic;
+        if (cmplx.cyclomatic > thresholds.longMethodComplexity) {
+          hotSpotCount += 1;
+          hotSpotExcess += cmplx.cyclomatic - thresholds.longMethodComplexity;
+        }
 
         const fnSmells: Smell[] = [];
         const longSmell = detectLongMethod(
@@ -152,6 +158,10 @@ export class PythonAdapter implements Adapter {
           const cmplx = computeComplexity(method.bodyNode);
           totalFunctions += 1;
           totalComplexity += cmplx.cyclomatic;
+          if (cmplx.cyclomatic > thresholds.longMethodComplexity) {
+            hotSpotCount += 1;
+            hotSpotExcess += cmplx.cyclomatic - thresholds.longMethodComplexity;
+          }
 
           const methodSmells: Smell[] = [];
           const longSmell = detectLongMethod(
@@ -262,7 +272,9 @@ export class PythonAdapter implements Adapter {
     const cycles = detectCycles(graph);
 
     const coupling = computeCoupling(aggregatedEdges);
-    const fanOutTotal = Array.from(coupling.fanOut.values()).reduce((a, b) => a + b, 0);
+    const fanOutValues = Array.from(coupling.fanOut.values());
+    const fanOutTotal = fanOutValues.reduce((a, b) => a + b, 0);
+    const fanOutMax = fanOutValues.length > 0 ? Math.max(...fanOutValues) : 0;
 
     // attach class fanIn/fanOut at module level (kept zero for individual classes — not yet wired)
 
@@ -275,6 +287,9 @@ export class PythonAdapter implements Adapter {
         cycleCount: cycles.length,
         moduleCount: modules.length,
         fanOutTotal,
+        fanOutMax,
+        hotSpotCount,
+        hotSpotExcess,
         smells: allSmells,
       },
       weights
