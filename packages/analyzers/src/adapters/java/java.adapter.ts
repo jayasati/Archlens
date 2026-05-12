@@ -22,6 +22,7 @@ import {
 } from '../../metrics/coupling.js';
 import { computeModuleCohesion, type FileEdge } from '../../metrics/cohesion.js';
 import { computeScores } from '../../scoring/engine.js';
+import { stampModuleScores } from '../../scoring/module-scores.js';
 import { mergeThresholds, mergeWeights } from '../../scoring/weights.default.js';
 import { scoreToGrade } from '../../scoring/grading.js';
 import { buildModuleGraph } from '../../graph/graph-builder.js';
@@ -325,6 +326,8 @@ function transformRunnerOutput(
       mod.workspaceCohesionRatio = ratio;
     }
   }
+
+  stampModuleScores(modules, allSmells, cycles, thresholds.longMethodComplexity);
 
   const scores = computeScores(
     {

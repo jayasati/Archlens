@@ -15,9 +15,31 @@ import { computeComplexity } from '../../metrics/complexity.js';
 import { detectDeepNesting } from '../../metrics/smells/deep-nesting.js';
 import { detectGodClass } from '../../metrics/smells/god-class.js';
 import { detectLongMethod } from '../../metrics/smells/long-method.js';
+import { detectLongParameterList } from '../../metrics/smells/long-parameter-list.js';
+import { detectExcessiveComplexity } from '../../metrics/smells/excessive-complexity.js';
+import { detectHighWmc } from '../../metrics/smells/high-wmc.js';
+import { detectLowCohesion } from '../../metrics/smells/low-cohesion.js';
+import { detectHubDependency } from '../../metrics/smells/hub-dependency.js';
+import { detectEmptyCatch } from '../../metrics/smells/empty-catch.js';
+import { detectMagicNumbers } from '../../metrics/smells/magic-numbers.js';
+import { detectLongBooleanExpression } from '../../metrics/smells/long-boolean-expression.js';
+import { detectLargeMatch } from '../../metrics/smells/large-match.js';
+import { detectCommentedOutCode } from '../../metrics/smells/commented-out-code.js';
+import { detectTodoAccumulation } from '../../metrics/smells/todo-accumulation.js';
+import { detectDataClass } from '../../metrics/smells/data-class.js';
+import { detectLazyClass } from '../../metrics/smells/lazy-class.js';
+import { detectPrimitiveObsession } from '../../metrics/smells/primitive-obsession.js';
+import { detectGodFunction } from '../../metrics/smells/god-function.js';
+import { detectCyclicDependencies } from '../../metrics/smells/cyclic-dependencies.js';
+import { detectUnstableDependency } from '../../metrics/smells/unstable-dependency.js';
+import { detectGodPackage } from '../../metrics/smells/god-package.js';
+import { detectScatteredFunctionality } from '../../metrics/smells/scattered-functionality.js';
+import { detectCrossLayerSkip } from '../../metrics/smells/cross-layer-skip.js';
+import { detectRepoHygiene } from '../../metrics/smells/repo-hygiene.js';
 import { computeCoupling, enrichModuleCoupling } from '../../metrics/coupling.js';
 import { computeModuleCohesion, type FileEdge } from '../../metrics/cohesion.js';
 import { computeScores } from '../../scoring/engine.js';
+import { stampModuleScores } from '../../scoring/module-scores.js';
 import { mergeThresholds, mergeWeights } from '../../scoring/weights.default.js';
 import { scoreToGrade } from '../../scoring/grading.js';
 import { buildModuleGraph } from '../../graph/graph-builder.js';
@@ -159,6 +181,57 @@ export class PythonAdapter implements Adapter {
         );
         if (deepSmell) fnSmells.push(deepSmell);
 
+        const fnBase = {
+          filePath: parsed.relPath,
+          name: fn.name,
+          startLine: fn.startLine,
+          endLine: fn.endLine,
+        };
+        const lpl = detectLongParameterList(
+          { ...fnBase, paramCount: fn.paramCount },
+          { count: thresholds.longParameterListCount }
+        );
+        if (lpl) fnSmells.push(lpl);
+        const exc = detectExcessiveComplexity(
+          { ...fnBase, complexity: cmplx.cyclomatic },
+          { complexity: thresholds.excessiveComplexity }
+        );
+        if (exc) fnSmells.push(exc);
+        fnSmells.push(...detectEmptyCatch({ ...fnBase, bodyNode: fn.bodyNode }));
+        const mn = detectMagicNumbers(
+          { ...fnBase, bodyNode: fn.bodyNode },
+          { min: thresholds.magicNumberMin }
+        );
+        if (mn) fnSmells.push(mn);
+        const lbool = detectLongBooleanExpression(
+          { ...fnBase, bodyNode: fn.bodyNode },
+          { operators: thresholds.longBooleanOperators }
+        );
+        if (lbool) fnSmells.push(lbool);
+        fnSmells.push(
+          ...detectLargeMatch(
+            { ...fnBase, bodyNode: fn.bodyNode },
+            { cases: thresholds.largeMatchCases }
+          )
+        );
+        const po = detectPrimitiveObsession(
+          {
+            ...fnBase,
+            paramCount: fn.paramCount,
+            annotatedParamCount: fn.annotatedParamCount,
+          },
+          { params: thresholds.primitiveObsessionParams }
+        );
+        if (po) fnSmells.push(po);
+        const godFn = detectGodFunction(
+          { ...fnBase, loc: fn.loc, complexity: cmplx.cyclomatic },
+          {
+            loc: thresholds.godFunctionLoc,
+            complexity: thresholds.godFunctionComplexity,
+          }
+        );
+        if (godFn) fnSmells.push(godFn);
+
         const fnIR: FunctionIR = {
           id: `${fileIR.id}__fn_${fn.name}_${fn.startLine}`,
           name: fn.name,
@@ -217,6 +290,50 @@ export class PythonAdapter implements Adapter {
           );
           if (deepSmell) methodSmells.push(deepSmell);
 
+          const methodBase = {
+            filePath: parsed.relPath,
+            className: cls.name,
+            name: method.name,
+            startLine: method.startLine,
+            endLine: method.endLine,
+          };
+          const mlpl = detectLongParameterList(
+            { ...methodBase, paramCount: method.paramCount },
+            { count: thresholds.longParameterListCount }
+          );
+          if (mlpl) methodSmells.push(mlpl);
+          const mexc = detectExcessiveComplexity(
+            { ...methodBase, complexity: cmplx.cyclomatic },
+            { complexity: thresholds.excessiveComplexity }
+          );
+          if (mexc) methodSmells.push(mexc);
+          methodSmells.push(...detectEmptyCatch({ ...methodBase, bodyNode: method.bodyNode }));
+          const mmn = detectMagicNumbers(
+            { ...methodBase, bodyNode: method.bodyNode },
+            { min: thresholds.magicNumberMin }
+          );
+          if (mmn) methodSmells.push(mmn);
+          const mlbool = detectLongBooleanExpression(
+            { ...methodBase, bodyNode: method.bodyNode },
+            { operators: thresholds.longBooleanOperators }
+          );
+          if (mlbool) methodSmells.push(mlbool);
+          methodSmells.push(
+            ...detectLargeMatch(
+              { ...methodBase, bodyNode: method.bodyNode },
+              { cases: thresholds.largeMatchCases }
+            )
+          );
+          const mpo = detectPrimitiveObsession(
+            {
+              ...methodBase,
+              paramCount: method.paramCount,
+              annotatedParamCount: method.annotatedParamCount,
+            },
+            { params: thresholds.primitiveObsessionParams }
+          );
+          if (mpo) methodSmells.push(mpo);
+
           methodIRs.push({
             id: `${fileIR.id}__cls_${cls.name}__m_${method.name}_${method.startLine}`,
             name: method.name,
@@ -243,6 +360,45 @@ export class PythonAdapter implements Adapter {
         );
         if (godSmell) classSmells.push(godSmell);
 
+        const wmcSmell = detectHighWmc(
+          {
+            filePath: parsed.relPath,
+            name: cls.name,
+            startLine: cls.startLine,
+            endLine: cls.endLine,
+            methodComplexities: methodIRs.map((m) => m.complexity),
+          },
+          { wmc: thresholds.highWmc }
+        );
+        if (wmcSmell) classSmells.push(wmcSmell);
+
+        const dataSmell = detectDataClass(
+          {
+            filePath: parsed.relPath,
+            name: cls.name,
+            startLine: cls.startLine,
+            endLine: cls.endLine,
+            attributeCount: cls.attributes.length,
+            methodNames: cls.methods.map((m) => m.name),
+          },
+          { maxMethods: thresholds.dataClassMaxMethods }
+        );
+        if (dataSmell) classSmells.push(dataSmell);
+
+        const lazySmell = detectLazyClass(
+          {
+            filePath: parsed.relPath,
+            name: cls.name,
+            startLine: cls.startLine,
+            endLine: cls.endLine,
+            loc: cls.loc,
+            methodCount: cls.methods.length,
+            attributeCount: cls.attributes.length,
+          },
+          { maxLoc: thresholds.lazyClassMaxLoc }
+        );
+        if (lazySmell) classSmells.push(lazySmell);
+
         const classIR: ClassIR = {
           id: `${fileIR.id}__cls_${cls.name}_${cls.startLine}`,
           name: cls.name,
@@ -256,7 +412,20 @@ export class PythonAdapter implements Adapter {
         fileSmells.push(...classSmells);
       }
 
-      fileIR.smells = [];
+      const fileLevelSmells: Smell[] = [];
+      const commented = detectCommentedOutCode(
+        { filePath: parsed.relPath, source: parsed.source },
+        { lines: thresholds.commentedCodeLines }
+      );
+      if (commented) fileLevelSmells.push(commented);
+      const todo = detectTodoAccumulation(
+        { filePath: parsed.relPath, source: parsed.source },
+        { count: thresholds.todoCommentLimit }
+      );
+      if (todo) fileLevelSmells.push(todo);
+
+      fileIR.smells = fileLevelSmells;
+      fileSmells.push(...fileLevelSmells);
       allSmells.push(...fileSmells);
 
       const existingModule = modulesByName.get(moduleId);
@@ -310,6 +479,114 @@ export class PythonAdapter implements Adapter {
         mod.workspaceCohesionRatio = ratio;
       }
     }
+
+    // Module / graph / repo-level smells. Wired here so module-level findings
+    // also contribute to the smell-density score.
+    const moduleAnchors = new Map<string, string>();
+    const moduleNames = new Map<string, string>();
+    for (const mod of modules) {
+      moduleNames.set(mod.id, mod.name);
+      const first = mod.files[0];
+      if (first) moduleAnchors.set(mod.id, first.path);
+    }
+
+    const moduleLevelSmells: Smell[] = [];
+    for (const mod of modules) {
+      const anchor = moduleAnchors.get(mod.id);
+      if (!anchor) continue;
+      const sizeInfo = moduleSizes.get(mod.id) ?? { loc: 0, fileCount: mod.files.length };
+
+      if (mod.cohesionRatio !== undefined) {
+        const s = detectLowCohesion(
+          {
+            moduleId: mod.id,
+            moduleName: mod.name,
+            cohesionRatio: mod.cohesionRatio,
+            fileCount: sizeInfo.fileCount,
+            anchorFile: anchor,
+          },
+          { ratio: thresholds.lowCohesionRatio }
+        );
+        if (s) moduleLevelSmells.push(s);
+      }
+
+      const hubSmell = detectHubDependency(
+        {
+          moduleId: mod.id,
+          moduleName: mod.name,
+          fanIn: mod.fanIn ?? 0,
+          anchorFile: anchor,
+        },
+        { fanIn: thresholds.hubFanIn }
+      );
+      if (hubSmell) moduleLevelSmells.push(hubSmell);
+
+      if (mod.instability !== undefined) {
+        const u = detectUnstableDependency(
+          {
+            moduleId: mod.id,
+            moduleName: mod.name,
+            fanIn: mod.fanIn ?? 0,
+            fanOut: mod.fanOut ?? 0,
+            instability: mod.instability,
+            anchorFile: anchor,
+          },
+          {
+            instability: thresholds.unstableInstability,
+            hubFanIn: thresholds.hubFanIn,
+          }
+        );
+        if (u) moduleLevelSmells.push(u);
+      }
+
+      const godPkg = detectGodPackage(
+        {
+          moduleId: mod.id,
+          moduleName: mod.name,
+          fileCount: sizeInfo.fileCount,
+          loc: sizeInfo.loc,
+          anchorFile: anchor,
+        },
+        { files: thresholds.godPackageFiles, loc: thresholds.godPackageLoc }
+      );
+      if (godPkg) moduleLevelSmells.push(godPkg);
+
+      const scattered = detectScatteredFunctionality(
+        {
+          moduleId: mod.id,
+          moduleName: mod.name,
+          fanOut: mod.fanOut ?? 0,
+          anchorFile: anchor,
+        },
+        { fanOut: thresholds.scatteredFanOut }
+      );
+      if (scattered) moduleLevelSmells.push(scattered);
+    }
+
+    const graphSmells: Smell[] = [];
+    graphSmells.push(
+      ...detectCyclicDependencies({
+        cycles,
+        moduleAnchors,
+        moduleNames,
+      })
+    );
+    graphSmells.push(
+      ...detectCrossLayerSkip({
+        edges: aggregatedEdges,
+        moduleNames,
+        moduleAnchors,
+      })
+    );
+
+    const hygieneSmells = await detectRepoHygiene(
+      { repoPath: absRepo },
+      { largeBinaryBytes: thresholds.largeBinaryBytes }
+    );
+
+    allSmells.push(...moduleLevelSmells, ...graphSmells, ...hygieneSmells);
+
+    stampModuleScores(modules, allSmells, cycles, thresholds.longMethodComplexity);
 
     const scores = computeScores(
       {

@@ -63,6 +63,12 @@ export interface ReportModuleScoreDto {
   abstractness?: number;
   /** |abstractness + instability − 1| — distance from the main sequence. */
   martinDistance?: number;
+  /**
+   * Per-module sub-scores out of 100, computed with the same engine as the
+   * repo-level breakdown but scoped locally. `duplication` is always 100 here
+   * (jscpd runs repo-wide). Undefined on older reports that predate this.
+   */
+  scoreBreakdown?: ScoreBreakdown;
 }
 
 export interface ReportModuleFileDto {
@@ -77,6 +83,11 @@ export interface ReportModuleFileDto {
 
 export interface ReportModuleDetailDto extends ReportModuleScoreDto {
   files: ReportModuleFileDto[];
+  /**
+   * Every smell whose `file` resolves into a file in this module — already
+   * aggregated server-side so the UI doesn't need a per-file fan-out fetch.
+   */
+  smells: Smell[];
 }
 
 export interface ReportFileDetailDto {

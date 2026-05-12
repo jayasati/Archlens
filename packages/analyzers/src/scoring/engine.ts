@@ -185,3 +185,113 @@ function clamp(value: number): number {
 function round(value: number): number {
   return Math.round(value * 100) / 100;
 }
+
+export interface ModuleScoreInput {
+  totalLoc: number;
+  hotSpotCount: number;
+  hotSpotExcess: number;
+  fanIn: number;
+  fanOut: number;
+  cohesionRatio?: number;
+  smells: Smell[];
+  // True iff this module participates in any detected cycle. Cycles are not a
+  // single-module concept, but we still want to surface the consequence on
+  // the module's coupling sub-score so users can see *why* a module's coupling
+  // tanks.
+  inCycle: boolean;
+}
+
+/**
+ * Per-module sub-scores. Mirrors {@link computeScores} but with locally
+ * meaningful penalties: there's no duplication signal at module granularity
+ * (jscpd is run repo-wide), so it's left off the breakdown.
+ *
+ * Returned shape reuses {@link ScoreBreakdown} so the UI can render it with
+ * the same components as the repo-level breakdown — `duplication` is set to
+ * 100 with a measurementNote so it doesn't drag the overall down.
+ */
+export function computeModuleScores(input: ModuleScoreInput): ScoreBreakdown {
+  const notes: MeasurementNotes = {};
+  const derivation: Derivation = {};
+
+  // ── Complexity ────────────────────────────────────────────────────────
+  const hotSpotPerKloc = input.totalLoc > 0 ? (input.hotSpotExcess * 1000) / input.totalLoc : 0;
+  const complexityScore = clamp(100 - hotSpotPerKloc * 2);
+  derivation.complexity = `100 − hot-spot density × 2 = ${complexityScore.toFixed(0)} (${input.hotSpotCount} hot-spot function${input.hotSpotCount === 1 ? '' : 's'} over ${input.totalLoc.toLocaleString()} LOC)`;
+
+  // ── Duplication ───────────────────────────────────────────────────────
+  // jscpd runs at the repo level, not per-module. Skip the dimension.
+  notes.duplication = 'off — duplication is measured per repo, not per module';
+  derivation.duplication = 'not measured per module';
+  const duplicationScore = 100;
+
+  // ── Coupling ──────────────────────────────────────────────────────────
+  // For a single module, "coupling" is its own fan-out + dual-hub-ness.
+  // Penalise heavy fan-out (depends on many) and dual-hub (both consumed and
+  // consumes heavily). Cycles add a fixed hit, same as the repo-level engine.
+  const fanOutPenalty = Math.max(0, input.fanOut - 3) * 5;
+  const dualHub = input.fanIn * input.fanOut;
+  const dualHubPenalty = Math.max(0, dualHub - 16) * 1.5;
+  const cyclePenalty = input.inCycle ? 15 : 0;
+  const couplingScore = clamp(100 - fanOutPenalty - dualHubPenalty - cyclePenalty);
+  if (input.fanIn === 0 && input.fanOut === 0) {
+    notes.coupling = 'limited signal — isolated module';
+  }
+  derivation.coupling = `100 − fan-out penalty − dual-hub penalty${input.inCycle ? ' − cycle penalty' : ''} = ${couplingScore.toFixed(0)} (in ${input.fanIn}, out ${input.fanOut}${input.inCycle ? ', in cycle' : ''})`;
+
+  // ── Cohesion ──────────────────────────────────────────────────────────
+  let cohesionScore: number;
+  if (input.cohesionRatio === undefined) {
+    cohesionScore = 100;
+    notes.cohesion = 'limited signal — no module-internal imports detected';
+    derivation.cohesion = 'no internal-edge signal — defaulted to 100';
+  } else {
+    cohesionScore = clamp(input.cohesionRatio * 100);
+    derivation.cohesion = `cohesion ratio × 100 = ${cohesionScore.toFixed(0)} (${(input.cohesionRatio * 100).toFixed(0)}% of edges stay inside)`;
+  }
+
+  // ── Smells ────────────────────────────────────────────────────────────
+  const counts: Record<Severity, number> = { critical: 0, major: 0, minor: 0, info: 0 };
+  for (const s of input.smells) counts[s.severity] += 1;
+  const effectiveLoc = Math.max(input.totalLoc, MIN_RATE_LOC);
+  let smellsPenalty = 0;
+  for (const sev of Object.keys(counts) as Severity[]) {
+    const rate = (counts[sev] * 1000) / effectiveLoc;
+    smellsPenalty += rate * SEVERITY_PENALTY_PER_KLOC[sev];
+  }
+  const smellsScore = clamp(100 - smellsPenalty);
+  derivation.smells = `100 − Σ severity-weighted rate per KLOC = ${smellsScore.toFixed(0)} (${counts.critical}c/${counts.major}M/${counts.minor}m/${counts.info}i across ${input.totalLoc.toLocaleString()} LOC)`;
+
+  // ── Overall ───────────────────────────────────────────────────────────
+  // Use the default repo-level weights, with active-component renormalisation
+  // so a module without cohesion signal isn't credited with a free 100.
+  const merged = mergeWeights();
+  const components: Array<[Dimension, number, number]> = [
+    ['complexity', complexityScore, merged.complexity],
+    ['duplication', duplicationScore, merged.duplication],
+    ['coupling', couplingScore, merged.coupling],
+    ['cohesion', cohesionScore, merged.cohesion],
+    ['smells', smellsScore, merged.smells],
+  ];
+  const activeComponents = components.filter(([dim]) => notes[dim] === undefined);
+  const activeWeightSum = activeComponents.reduce((sum, [, , w]) => sum + w, 0);
+  const overall =
+    activeWeightSum > 0
+      ? clamp(
+          activeComponents.reduce((sum, [, score, weight]) => sum + score * weight, 0) /
+            activeWeightSum
+        )
+      : 0;
+
+  const breakdown: ScoreBreakdown = {
+    complexity: round(complexityScore),
+    duplication: round(duplicationScore),
+    coupling: round(couplingScore),
+    cohesion: round(cohesionScore),
+    smells: round(smellsScore),
+    overall: round(overall),
+  };
+  if (Object.keys(notes).length > 0) breakdown.measurementNotes = notes;
+  if (Object.keys(derivation).length > 0) breakdown.derivation = derivation;
+  return breakdown;
+}

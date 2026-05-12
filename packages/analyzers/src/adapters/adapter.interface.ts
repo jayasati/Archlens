@@ -14,6 +14,34 @@ export interface SmellThresholds {
   godClassMethods: number;
   godClassLoc: number;
   deepNestingDepth: number;
+
+  // M1 — threshold-only smells
+  longParameterListCount: number;
+  excessiveComplexity: number;
+  highWmc: number;
+  lowCohesionRatio: number;
+  hubFanIn: number;
+
+  // M2 — AST-visitor smells
+  magicNumberMin: number;
+  longBooleanOperators: number;
+  largeMatchCases: number;
+  commentedCodeLines: number;
+  todoCommentLimit: number;
+  dataClassMaxMethods: number;
+  lazyClassMaxLoc: number;
+  primitiveObsessionParams: number;
+  godFunctionLoc: number;
+  godFunctionComplexity: number;
+
+  // M3 — graph-based smells
+  unstableInstability: number;
+  godPackageFiles: number;
+  godPackageLoc: number;
+  scatteredFanOut: number;
+
+  // M4 — repo-hygiene smells
+  largeBinaryBytes: number;
 }
 
 export interface AnalyzerConfig {

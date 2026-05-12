@@ -1,5 +1,5 @@
 {
-  "generatedAt": "2026-05-12T19:09:17.377Z",
+  "generatedAt": "2026-05-12T20:29:07.969Z",
   "repos": {
     "internshipPortal": {
       "languages": ["javascript"],
@@ -30,7 +30,7 @@
         "minor": 8,
         "info": 0
       },
-      "elapsedSeconds": 0.6
+      "elapsedSeconds": 1.6
     },
     "stockTrading": {
       "languages": ["java"],
@@ -61,7 +61,7 @@
         "minor": 5,
         "info": 0
       },
-      "elapsedSeconds": 0.7
+      "elapsedSeconds": 2
     },
     "stockBot": {
       "languages": ["python"],
@@ -71,14 +71,14 @@
         "duplication": 100,
         "coupling": 67.17,
         "cohesion": 74.31,
-        "smells": 79.92,
-        "overall": 79.33,
+        "smells": 58.07,
+        "overall": 74.95,
         "derivation": {
           "complexity": "100 − hot-spot density × 2 = 82 (21 hot-spot functions over 9,788 LOC)",
           "duplication": "100 − duplicate-lines ratio × 100 = 100 (0.0% of lines duplicated)",
           "coupling": "100 − avg-fanOut penalty − hub penalty − dual-hub penalty − cycle penalty = 67 (12 modules, avg fanOut 1.8, max 7, 1 cycle)",
           "cohesion": "LOC-weighted average of per-module cohesion ratios × 100 = 74 (8,869 LOC across modules with signal)",
-          "smells": "100 − Σ severity-weighted rate per KLOC = 80 (0 critical, 11 major, 87 minor, 0 info across 9,788 LOC)"
+          "smells": "100 − Σ severity-weighted rate per KLOC = 58 (0 critical, 33 major, 128 minor, 68 info across 9,788 LOC)"
         }
       },
       "moduleCount": 12,
@@ -88,11 +88,11 @@
       "totalClasses": 7,
       "smellsBySeverity": {
         "critical": 0,
-        "major": 11,
-        "minor": 87,
-        "info": 0
+        "major": 33,
+        "minor": 128,
+        "info": 68
       },
-      "elapsedSeconds": 0.2
+      "elapsedSeconds": 0.7
     }
   }
 }

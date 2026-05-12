@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { computeScores } from '../../src/scoring/engine.js';
+import { computeModuleScores, computeScores } from '../../src/scoring/engine.js';
 import { scoreToGrade } from '../../src/scoring/grading.js';
 
 describe('computeScores', () => {
@@ -161,5 +161,77 @@ describe('scoreToGrade', () => {
     expect(scoreToGrade(75)).toBe('C');
     expect(scoreToGrade(65)).toBe('D');
     expect(scoreToGrade(50)).toBe('E');
+  });
+});
+
+describe('computeModuleScores', () => {
+  it('scores a clean module near 100', () => {
+    const sb = computeModuleScores({
+      totalLoc: 500,
+      hotSpotCount: 0,
+      hotSpotExcess: 0,
+      fanIn: 2,
+      fanOut: 1,
+      cohesionRatio: 0.9,
+      smells: [],
+      inCycle: false,
+    });
+    expect(sb.overall).toBeGreaterThan(95);
+    expect(sb.complexity).toBe(100);
+    expect(sb.cohesion).toBeGreaterThan(85);
+  });
+
+  it('penalises cycles in coupling', () => {
+    const clean = computeModuleScores({
+      totalLoc: 500,
+      hotSpotCount: 0,
+      hotSpotExcess: 0,
+      fanIn: 2,
+      fanOut: 2,
+      cohesionRatio: 0.9,
+      smells: [],
+      inCycle: false,
+    });
+    const cyclic = computeModuleScores({
+      totalLoc: 500,
+      hotSpotCount: 0,
+      hotSpotExcess: 0,
+      fanIn: 2,
+      fanOut: 2,
+      cohesionRatio: 0.9,
+      smells: [],
+      inCycle: true,
+    });
+    expect(cyclic.coupling).toBeLessThan(clean.coupling);
+  });
+
+  it('drops cohesion when the module is incoherent', () => {
+    const sb = computeModuleScores({
+      totalLoc: 500,
+      hotSpotCount: 0,
+      hotSpotExcess: 0,
+      fanIn: 1,
+      fanOut: 1,
+      cohesionRatio: 0.1,
+      smells: [],
+      inCycle: false,
+    });
+    expect(sb.cohesion).toBeLessThan(20);
+  });
+
+  it('marks duplication as off with a measurement note', () => {
+    const sb = computeModuleScores({
+      totalLoc: 500,
+      hotSpotCount: 0,
+      hotSpotExcess: 0,
+      fanIn: 0,
+      fanOut: 0,
+      cohesionRatio: undefined,
+      smells: [],
+      inCycle: false,
+    });
+    expect(sb.measurementNotes?.duplication).toBeDefined();
+    // Cohesion has no signal here either, so it should be noted too.
+    expect(sb.measurementNotes?.cohesion).toBeDefined();
   });
 });

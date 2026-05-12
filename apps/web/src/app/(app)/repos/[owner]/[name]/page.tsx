@@ -22,6 +22,7 @@ import { RescanButton } from '@/components/scan/rescan-button';
 import { scoreToGrade } from '@/lib/utils/grade';
 import { formatScore, formatRatio, formatOptionalInt } from '@/lib/utils/format';
 import { classifyModuleShape } from '@/lib/utils/module-shape';
+import { ExpandableModulesTable } from '@/components/modules/expandable-modules-table';
 
 interface PageProps {
   params: { owner: string; name: string };
@@ -30,6 +31,7 @@ interface PageProps {
 interface RepoOverviewData {
   token: string;
   repoId: string;
+  scanId: string | null;
   summary: ReportSummaryDto | null;
   modules: ReportModuleScoreDto[];
   completedScans: ScanDto[];
@@ -53,6 +55,7 @@ async function loadRepoOverview(
     return {
       token,
       repoId: ctx.repo.id,
+      scanId: null,
       summary: null,
       modules: [],
       completedScans: [],
@@ -70,6 +73,7 @@ async function loadRepoOverview(
   return {
     token,
     repoId: ctx.repo.id,
+    scanId: latestCompleted.id,
     summary,
     modules,
     completedScans: completed,
@@ -90,7 +94,7 @@ export default async function RepoOverviewPage({ params }: PageProps) {
   }
   if (data === 'not-found') notFound();
 
-  const { token: serverToken, repoId, summary, modules, completedScans, latestScan } = data;
+  const { token: serverToken, repoId, scanId, summary, modules, completedScans, latestScan } = data;
 
   if (!summary) {
     return (
@@ -172,7 +176,11 @@ export default async function RepoOverviewPage({ params }: PageProps) {
         <h2 className="mb-3 text-sm font-semibold uppercase tracking-wide text-muted-foreground">
           Modules
         </h2>
-        <ModulesTable modules={modules} />
+        {scanId ? (
+          <ExpandableModulesTable scanId={scanId} modules={modules} />
+        ) : (
+          <ModulesTable modules={modules} />
+        )}
       </section>
 
       {summary.cycles && summary.cycles.length > 0 ? (

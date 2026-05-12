@@ -96,6 +96,12 @@ export const ModuleSchema = z.object({
   instability: z.number().min(0).max(1).optional(),
   abstractness: z.number().min(0).max(1).optional(),
   martinDistance: z.number().min(0).max(1).optional(),
+  /**
+   * Optional per-module breakdown. Same shape as the repo-level breakdown so
+   * the UI can render module sub-scores with the same component. Mirrored on
+   * `ReportModuleScoreDto.scoreBreakdown`.
+   */
+  scoreBreakdown: z.lazy(() => ScoreBreakdownSchema).optional(),
 });
 
 export const EdgeSchema = z.object({

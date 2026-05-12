@@ -18,6 +18,8 @@ export interface ParsedFunction {
   loc: number;
   bodyNode: Parser.SyntaxNode | null;
   paramCount: number;
+  /** How many parameters carry a type annotation (`x: int` etc.). */
+  annotatedParamCount: number;
 }
 
 export interface ParsedClass {
@@ -197,6 +199,7 @@ function parseFunction(node: Parser.SyntaxNode): ParsedFunction {
   const bodyNode = node.childForFieldName('body');
 
   const paramCount = paramsNode ? paramsNode.namedChildren.length : 0;
+  const annotatedParamCount = paramsNode ? countAnnotatedParams(paramsNode) : 0;
   const signature = `${nameNode ? nameNode.text : '<anonymous>'}(${
     paramsNode ? paramsNode.text.replace(/^\(|\)$/g, '') : ''
   })`;
@@ -209,7 +212,21 @@ function parseFunction(node: Parser.SyntaxNode): ParsedFunction {
     loc: countLoc(node.text),
     bodyNode,
     paramCount,
+    annotatedParamCount,
   };
+}
+
+function countAnnotatedParams(paramsNode: Parser.SyntaxNode): number {
+  // tree-sitter-python parameter kinds carrying an annotation:
+  //   typed_parameter, typed_default_parameter
+  // Plain `identifier` / `default_parameter` are untyped.
+  let n = 0;
+  for (const child of paramsNode.namedChildren) {
+    if (child.type === 'typed_parameter' || child.type === 'typed_default_parameter') {
+      n += 1;
+    }
+  }
+  return n;
 }
 
 function findChild(node: Parser.SyntaxNode, types: string[]): Parser.SyntaxNode | null {

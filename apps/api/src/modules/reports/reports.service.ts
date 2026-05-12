@@ -93,6 +93,7 @@ export class ReportsService {
         instability: irMod.instability,
         abstractness: irMod.abstractness,
         martinDistance: irMod.martinDistance,
+        scoreBreakdown: irMod.scoreBreakdown,
       };
     });
   }
@@ -118,8 +119,11 @@ export class ReportsService {
     const dbFilesByIrId = new Map(dbFiles.map((f) => [f.irFileId, f]));
 
     const stats = aggregateModule(irMod);
+    const moduleSmells: IrSmell[] = [];
     const files: ReportModuleFileDto[] = irMod.files.map((f) => {
       const dbF = dbFilesByIrId.get(f.id);
+      const fileSmells = collectFileSmells(f);
+      moduleSmells.push(...fileSmells);
       return {
         id: dbF?.id ?? '',
         irFileId: f.id,
@@ -127,7 +131,7 @@ export class ReportsService {
         language: f.language,
         loc: f.loc,
         complexity: fileTotalComplexity(f),
-        smellCount: collectFileSmells(f).length,
+        smellCount: fileSmells.length,
       };
     });
 
@@ -144,7 +148,17 @@ export class ReportsService {
       totalComplexity: stats.totalComplexity,
       avgComplexity: stats.avgComplexity,
       maxComplexity: stats.maxComplexity,
+      cohesionRatio: irMod.cohesionRatio,
+      fanIn: irMod.fanIn,
+      fanOut: irMod.fanOut,
+      instability: irMod.instability,
+      abstractness: irMod.abstractness,
+      martinDistance: irMod.martinDistance,
+      scoreBreakdown: irMod.scoreBreakdown,
       files,
+      smells: moduleSmells.sort(
+        (a, b) => (SEVERITY_RANK[a.severity] ?? 99) - (SEVERITY_RANK[b.severity] ?? 99)
+      ),
     };
   }
 
