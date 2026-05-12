@@ -14,7 +14,12 @@ import { IR_VERSION } from '../../ir/types.js';
 import { detectDeepNesting } from '../../metrics/smells/deep-nesting.js';
 import { detectGodClass } from '../../metrics/smells/god-class.js';
 import { detectLongMethod } from '../../metrics/smells/long-method.js';
-import { computeCoupling } from '../../metrics/coupling.js';
+import {
+  computeCoupling,
+  enrichModuleAbstractness,
+  enrichModuleCoupling,
+  type ModuleTypeCounts,
+} from '../../metrics/coupling.js';
 import { computeModuleCohesion, type FileEdge } from '../../metrics/cohesion.js';
 import { computeScores } from '../../scoring/engine.js';
 import { mergeThresholds, mergeWeights } from '../../scoring/weights.default.js';
@@ -88,6 +93,7 @@ function transformRunnerOutput(
   const cohesionFileEdges: FileEdge[] = [];
   const fileToModule = new Map<string, string>();
   const moduleSizes = new Map<string, { loc: number; fileCount: number }>();
+  const moduleTypeCounts = new Map<string, ModuleTypeCounts>();
   // Java imports are by FQN (package.Type) — build a map from importable package
   // to a representative file path so cohesion can detect when an import lands
   // inside the same module. We pick any one file per package; module assignment
@@ -134,6 +140,16 @@ function transformRunnerOutput(
       loc: existingSize.loc + file.loc,
       fileCount: existingSize.fileCount + 1,
     });
+    const tc = moduleTypeCounts.get(moduleId) ?? { total: 0, abstract: 0 };
+    for (const cls of file.classes) {
+      tc.total += 1;
+      // Interfaces and annotations are abstract by definition; classes only
+      // when the `abstract` modifier is set. Enums are concrete.
+      if (cls.kind === 'interface' || cls.kind === 'annotation' || cls.isAbstract) {
+        tc.abstract += 1;
+      }
+    }
+    moduleTypeCounts.set(moduleId, tc);
 
     const fileIR: FileIR = {
       id: `file_${slugifyPath(file.relPath)}`,
@@ -283,7 +299,13 @@ function transformRunnerOutput(
   const coupling = computeCoupling(aggregatedEdges);
   const fanOutValues = Array.from(coupling.fanOut.values());
   const fanOutTotal = fanOutValues.reduce((a, b) => a + b, 0);
-  const fanOutMax = fanOutValues.length > 0 ? Math.max(...fanOutValues) : 0;
+  const couplingSummary = enrichModuleCoupling(modules, coupling);
+  enrichModuleAbstractness(modules, moduleTypeCounts);
+  const martinPainSum = modules.reduce(
+    (sum, mod) =>
+      sum + (mod.martinDistance !== undefined ? Math.max(0, mod.martinDistance - 0.5) : 0),
+    0
+  );
 
   const cohesion = computeModuleCohesion(cohesionFileEdges, fileToModule, moduleSizes);
   for (const [mid, ratio] of cohesion.ratios) {
@@ -300,11 +322,13 @@ function transformRunnerOutput(
       cycleCount: cycles.length,
       moduleCount: modules.length,
       fanOutTotal,
-      fanOutMax,
+      fanOutMax: couplingSummary.fanOutMax,
+      dualHubMax: couplingSummary.dualHubMax,
       hotSpotCount,
       hotSpotExcess,
       cohesionWeighted: cohesion.cohesionWeighted,
       moduleLocSum: cohesion.moduleLocSum,
+      martinPainSum,
       smells: allSmells,
     },
     weights

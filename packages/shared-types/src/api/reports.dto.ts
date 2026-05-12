@@ -42,6 +42,18 @@ export interface ReportModuleScoreDto {
   totalComplexity: number;
   avgComplexity: number;
   maxComplexity: number;
+  /** Internal-edge / total-edge ratio. Undefined for single-file or leaf modules. */
+  cohesionRatio?: number;
+  /** Number of distinct other modules that import this one. */
+  fanIn?: number;
+  /** Number of distinct other modules this one imports. */
+  fanOut?: number;
+  /** Robert Martin's instability: fanOut / (fanIn + fanOut). Undefined when isolated. */
+  instability?: number;
+  /** Fraction of declared types that are abstract (interface / abstract class). */
+  abstractness?: number;
+  /** |abstractness + instability − 1| — distance from the main sequence. */
+  martinDistance?: number;
 }
 
 export interface ReportModuleFileDto {

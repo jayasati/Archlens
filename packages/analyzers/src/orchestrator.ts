@@ -6,7 +6,7 @@ import type { Adapter, AnalyzerConfig } from './adapters/adapter.interface.js';
 import { PythonAdapter } from './adapters/python/python.adapter.js';
 import { NodeAdapter } from './adapters/node/node.adapter.js';
 import { JavaAdapter } from './adapters/java/java.adapter.js';
-import { computeCoupling } from './metrics/coupling.js';
+import { computeCoupling, enrichModuleCoupling } from './metrics/coupling.js';
 import { detectDuplication, type DuplicationResult } from './metrics/duplication.js';
 import { computeScores } from './scoring/engine.js';
 import { mergeThresholds, mergeWeights } from './scoring/weights.default.js';
@@ -272,7 +272,15 @@ export function mergeIRs(
   const coupling = computeCoupling(edges);
   const fanOutValues = Array.from(coupling.fanOut.values());
   const fanOutTotal = fanOutValues.reduce((a, b) => a + b, 0);
-  const fanOutMax = fanOutValues.length > 0 ? Math.max(...fanOutValues) : 0;
+  // Re-derive per-module fanIn / fanOut / instability on the merged module
+  // set; per-adapter values from the unmerged IRs are stale once IDs are
+  // disambiguated and edges are unioned across languages.
+  const couplingSummary = enrichModuleCoupling(modules, coupling);
+  const martinPainSum = modules.reduce(
+    (sum, mod) =>
+      sum + (mod.martinDistance !== undefined ? Math.max(0, mod.martinDistance - 0.5) : 0),
+    0
+  );
 
   if (duplication) {
     const dupSmells = injectDuplicationSmells(modules, duplication);
@@ -288,12 +296,14 @@ export function mergeIRs(
       cycleCount: cycles.length,
       moduleCount: modules.length,
       fanOutTotal,
-      fanOutMax,
+      fanOutMax: couplingSummary.fanOutMax,
+      dualHubMax: couplingSummary.dualHubMax,
       hotSpotCount,
       hotSpotExcess,
       cohesionWeighted,
       moduleLocSum,
       duplicationRatio: duplication?.ratio,
+      martinPainSum,
       smells: allSmells,
     },
     mergeWeights(config.weights)

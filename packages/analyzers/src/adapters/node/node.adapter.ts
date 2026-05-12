@@ -16,7 +16,7 @@ import { computeComplexity, NODE_COMPLEXITY } from '../../metrics/complexity.js'
 import { detectDeepNesting } from '../../metrics/smells/deep-nesting.js';
 import { detectGodClass } from '../../metrics/smells/god-class.js';
 import { detectLongMethod } from '../../metrics/smells/long-method.js';
-import { computeCoupling } from '../../metrics/coupling.js';
+import { computeCoupling, enrichModuleCoupling } from '../../metrics/coupling.js';
 import { computeModuleCohesion, type FileEdge } from '../../metrics/cohesion.js';
 import { computeScores } from '../../scoring/engine.js';
 import { mergeThresholds, mergeWeights } from '../../scoring/weights.default.js';
@@ -113,6 +113,10 @@ export class NodeAdapter implements Adapter {
     const cohesionFileEdges: FileEdge[] = [];
     const fileToModule = new Map<string, string>();
     const moduleSizes = new Map<string, { loc: number; fileCount: number }>();
+    // Martin distance is Java-only. TypeScript uses `interface` ubiquitously
+    // for structural types (props, options bags), so abstractness counts
+    // wildly overstate "real" OO abstraction. Node modules deliberately leave
+    // abstractness / martinDistance undefined.
     let totalLoc = 0;
     let totalFunctions = 0;
     let totalClasses = 0;
@@ -318,7 +322,7 @@ export class NodeAdapter implements Adapter {
     const coupling = computeCoupling(aggregatedEdges);
     const fanOutValues = Array.from(coupling.fanOut.values());
     const fanOutTotal = fanOutValues.reduce((a, b) => a + b, 0);
-    const fanOutMax = fanOutValues.length > 0 ? Math.max(...fanOutValues) : 0;
+    const couplingSummary = enrichModuleCoupling(modules, coupling);
 
     const cohesion = computeModuleCohesion(cohesionFileEdges, fileToModule, moduleSizes);
     for (const [mid, ratio] of cohesion.ratios) {
@@ -335,7 +339,8 @@ export class NodeAdapter implements Adapter {
         cycleCount: cycles.length,
         moduleCount: modules.length,
         fanOutTotal,
-        fanOutMax,
+        fanOutMax: couplingSummary.fanOutMax,
+        dualHubMax: couplingSummary.dualHubMax,
         hotSpotCount,
         hotSpotExcess,
         cohesionWeighted: cohesion.cohesionWeighted,

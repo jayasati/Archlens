@@ -84,6 +84,58 @@ describe('computeScores', () => {
     expect(scores.duplication).toBe(100);
   });
 
+  it('penalises a dual hub (high fanIn * fanOut) above the scaled threshold', () => {
+    // 8 modules → dualHubStart = max(25, 8*4) = 32. dualHubMax 50 over 32 → penalty 27.
+    const scores = computeScores({
+      totalLoc: 1000,
+      totalFunctions: 50,
+      totalClasses: 0,
+      totalComplexity: 50,
+      cycleCount: 0,
+      moduleCount: 8,
+      fanOutTotal: 12,
+      fanOutMax: 4,
+      dualHubMax: 50,
+      smells: [],
+    });
+    expect(scores.coupling).toBeLessThan(80);
+  });
+
+  it('scales the hub threshold by module count', () => {
+    // 50 modules → hubStart = max(5, ceil(15)) = 15. fanOutMax 7 → no hub penalty.
+    const scores = computeScores({
+      totalLoc: 1000,
+      totalFunctions: 50,
+      totalClasses: 0,
+      totalComplexity: 50,
+      cycleCount: 0,
+      moduleCount: 50,
+      fanOutTotal: 50,
+      fanOutMax: 7,
+      smells: [],
+    });
+    // avgFanOut = 1.0 → avgPenalty = 0; hub doesn't fire; expect ~100.
+    expect(scores.coupling).toBeGreaterThan(95);
+  });
+
+  it('penalises Martin pain modules in coupling', () => {
+    // martinPainSum 3.0 → painPenalty 18 → coupling ~82.
+    const scores = computeScores({
+      totalLoc: 1000,
+      totalFunctions: 50,
+      totalClasses: 0,
+      totalComplexity: 50,
+      cycleCount: 0,
+      moduleCount: 5,
+      fanOutTotal: 4,
+      fanOutMax: 2,
+      martinPainSum: 3,
+      smells: [],
+    });
+    expect(scores.coupling).toBeLessThan(85);
+    expect(scores.coupling).toBeGreaterThan(70);
+  });
+
   it('uses provided cohesion fields when signal is present', () => {
     // 60% cohesion weighted average → score 60.
     const scores = computeScores({

@@ -8,6 +8,18 @@ export function formatScore(value: number): string {
   return Math.round(value).toString();
 }
 
+/** Render an optional 0..1 ratio as "73%" or "—" if undefined. */
+export function formatRatio(value: number | undefined): string {
+  if (value === undefined || Number.isNaN(value)) return '—';
+  return `${Math.round(value * 100)}%`;
+}
+
+/** Render an optional integer field as a string or "—" if undefined. */
+export function formatOptionalInt(value: number | undefined): string {
+  if (value === undefined) return '—';
+  return Math.round(value).toString();
+}
+
 export function formatRelativeDate(iso: string): string {
   const then = new Date(iso).getTime();
   const now = Date.now();

@@ -15,7 +15,7 @@ import { computeComplexity } from '../../metrics/complexity.js';
 import { detectDeepNesting } from '../../metrics/smells/deep-nesting.js';
 import { detectGodClass } from '../../metrics/smells/god-class.js';
 import { detectLongMethod } from '../../metrics/smells/long-method.js';
-import { computeCoupling } from '../../metrics/coupling.js';
+import { computeCoupling, enrichModuleCoupling } from '../../metrics/coupling.js';
 import { computeModuleCohesion, type FileEdge } from '../../metrics/cohesion.js';
 import { computeScores } from '../../scoring/engine.js';
 import { mergeThresholds, mergeWeights } from '../../scoring/weights.default.js';
@@ -289,15 +289,13 @@ export class PythonAdapter implements Adapter {
     const coupling = computeCoupling(aggregatedEdges);
     const fanOutValues = Array.from(coupling.fanOut.values());
     const fanOutTotal = fanOutValues.reduce((a, b) => a + b, 0);
-    const fanOutMax = fanOutValues.length > 0 ? Math.max(...fanOutValues) : 0;
+    const couplingSummary = enrichModuleCoupling(modules, coupling);
 
     const cohesion = computeModuleCohesion(cohesionFileEdges, fileToModule, moduleSizes);
     for (const [mid, ratio] of cohesion.ratios) {
       const mod = modulesByName.get(mid);
       if (mod) mod.cohesionRatio = ratio;
     }
-
-    // attach class fanIn/fanOut at module level (kept zero for individual classes — not yet wired)
 
     const scores = computeScores(
       {
@@ -308,7 +306,8 @@ export class PythonAdapter implements Adapter {
         cycleCount: cycles.length,
         moduleCount: modules.length,
         fanOutTotal,
-        fanOutMax,
+        fanOutMax: couplingSummary.fanOutMax,
+        dualHubMax: couplingSummary.dualHubMax,
         hotSpotCount,
         hotSpotExcess,
         cohesionWeighted: cohesion.cohesionWeighted,

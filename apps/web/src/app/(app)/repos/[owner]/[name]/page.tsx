@@ -20,7 +20,7 @@ import { loadRepoContext } from '@/lib/api/repo-loader';
 import { getReportSummaryServer, listReportModulesServer } from '@/lib/api/reports';
 import { RescanButton } from '@/components/scan/rescan-button';
 import { scoreToGrade } from '@/lib/utils/grade';
-import { formatScore } from '@/lib/utils/format';
+import { formatScore, formatRatio, formatOptionalInt } from '@/lib/utils/format';
 
 interface PageProps {
   params: { owner: string; name: string };
@@ -155,13 +155,37 @@ export default async function RepoOverviewPage({ params }: PageProps) {
                 <TableHead className="text-right">LOC</TableHead>
                 <TableHead className="text-right">Avg cx</TableHead>
                 <TableHead className="text-right">Smells</TableHead>
+                <TableHead className="text-right" title="Fan-in: # modules importing this one">
+                  In
+                </TableHead>
+                <TableHead className="text-right" title="Fan-out: # modules this one imports">
+                  Out
+                </TableHead>
+                <TableHead
+                  className="text-right"
+                  title="Internal-edge / total-edge ratio. Higher = more self-contained."
+                >
+                  Cohesion
+                </TableHead>
+                <TableHead
+                  className="text-right"
+                  title="Martin's I = fanOut / (fanIn + fanOut). 0 = stable provider, 1 = volatile consumer."
+                >
+                  Instab
+                </TableHead>
+                <TableHead
+                  className="text-right"
+                  title="|abstractness + instability − 1|. Far from 0 = zone of pain or uselessness."
+                >
+                  D-main
+                </TableHead>
                 <TableHead className="text-right">Grade</TableHead>
               </TableRow>
             </TableHeader>
             <TableBody>
               {modules.length === 0 ? (
                 <TableRow>
-                  <TableCell colSpan={6} className="text-center text-muted-foreground">
+                  <TableCell colSpan={11} className="text-center text-muted-foreground">
                     No modules detected.
                   </TableCell>
                 </TableRow>
@@ -177,6 +201,11 @@ export default async function RepoOverviewPage({ params }: PageProps) {
                       <TableCell className="text-right">{m.totalLoc}</TableCell>
                       <TableCell className="text-right">{formatScore(m.avgComplexity)}</TableCell>
                       <TableCell className="text-right">{m.smellCount}</TableCell>
+                      <TableCell className="text-right">{formatOptionalInt(m.fanIn)}</TableCell>
+                      <TableCell className="text-right">{formatOptionalInt(m.fanOut)}</TableCell>
+                      <TableCell className="text-right">{formatRatio(m.cohesionRatio)}</TableCell>
+                      <TableCell className="text-right">{formatRatio(m.instability)}</TableCell>
+                      <TableCell className="text-right">{formatRatio(m.martinDistance)}</TableCell>
                       <TableCell className="text-right">
                         <div className="flex justify-end">
                           <GradeBadge grade={grade} size="sm" />

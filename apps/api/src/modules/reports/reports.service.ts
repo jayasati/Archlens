@@ -80,6 +80,12 @@ export class ReportsService {
         totalComplexity: stats.totalComplexity,
         avgComplexity: stats.avgComplexity,
         maxComplexity: stats.maxComplexity,
+        cohesionRatio: irMod.cohesionRatio,
+        fanIn: irMod.fanIn,
+        fanOut: irMod.fanOut,
+        instability: irMod.instability,
+        abstractness: irMod.abstractness,
+        martinDistance: irMod.martinDistance,
       };
     });
   }

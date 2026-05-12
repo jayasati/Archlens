@@ -31,6 +31,13 @@ export interface ParsedClass {
   implementsList: string[];
   methods: ParsedFunction[];
   attributes: string[];
+  isAbstract: boolean;
+}
+
+export interface ParsedInterface {
+  name: string;
+  startLine: number;
+  endLine: number;
 }
 
 export interface ParsedFile {
@@ -40,6 +47,7 @@ export interface ParsedFile {
   loc: number;
   imports: ParsedImport[];
   classes: ParsedClass[];
+  interfaces: ParsedInterface[];
   functions: ParsedFunction[];
   tree: Parser.Tree;
 }
@@ -55,10 +63,11 @@ export async function parseNodeSource(
 
   const imports: ParsedImport[] = [];
   const classes: ParsedClass[] = [];
+  const interfaces: ParsedInterface[] = [];
   const functions: ParsedFunction[] = [];
 
   for (const child of root.namedChildren) {
-    visitTopLevel(child, imports, classes, functions, []);
+    visitTopLevel(child, imports, classes, interfaces, functions, []);
   }
 
   return {
@@ -68,6 +77,7 @@ export async function parseNodeSource(
     loc: countLoc(source),
     imports,
     classes,
+    interfaces,
     functions,
     tree,
   };
@@ -87,6 +97,7 @@ function visitTopLevel(
   node: Parser.SyntaxNode,
   imports: ParsedImport[],
   classes: ParsedClass[],
+  interfaces: ParsedInterface[],
   functions: ParsedFunction[],
   externalDecorators: string[]
 ): void {
@@ -121,7 +132,7 @@ function visitTopLevel(
     }
     for (const child of node.namedChildren) {
       if (child.type === 'decorator' || child.type === 'string') continue;
-      visitTopLevel(child, imports, classes, functions, collected);
+      visitTopLevel(child, imports, classes, interfaces, functions, collected);
     }
     return;
   }
@@ -131,8 +142,31 @@ function visitTopLevel(
     return;
   }
 
+  if (type === 'interface_declaration') {
+    const nameNode = node.childForFieldName('name');
+    interfaces.push({
+      name: nameNode?.text ?? '<anonymous>',
+      startLine: node.startPosition.row + 1,
+      endLine: node.endPosition.row + 1,
+    });
+    return;
+  }
+
   if (type === 'function_declaration' || type === 'generator_function_declaration') {
     functions.push(parseFunction(node, externalDecorators));
+    return;
+  }
+
+  // Modern JS/TS dominates with `const foo = () => {...}` (and the
+  // `const foo = asyncHandler(async (req, res) => {...})` Express pattern).
+  // Without this branch every controller / React component / hook is
+  // invisible to function counting + complexity + smell detection.
+  if (type === 'lexical_declaration' || type === 'variable_declaration') {
+    for (const decl of node.namedChildren) {
+      if (decl.type !== 'variable_declarator') continue;
+      const fn = parseVariableFunction(decl, externalDecorators);
+      if (fn) functions.push(fn);
+    }
     return;
   }
 }
@@ -231,6 +265,7 @@ function parseClass(node: Parser.SyntaxNode, externalDecorators: string[] = []):
     implementsList,
     methods,
     attributes,
+    isAbstract: node.type === 'abstract_class_declaration',
   };
 }
 
@@ -252,6 +287,85 @@ function parseFunction(node: Parser.SyntaxNode, decorators: string[]): ParsedFun
     paramCount,
     decorators,
   };
+}
+
+/**
+ * Extract a function from `const NAME = ... arrow_function ...` or
+ * `const NAME = function () {...}`. Also handles the common
+ * `const NAME = wrapper(arrow_function)` pattern (Express `asyncHandler`,
+ * Redux `createSlice`, etc.) — we recognise the inner arrow and credit it
+ * to the variable name so the call wrapping doesn't hide the function.
+ */
+function parseVariableFunction(
+  declarator: Parser.SyntaxNode,
+  decorators: string[]
+): ParsedFunction | null {
+  const nameNode = declarator.childForFieldName('name');
+  const valueNode = declarator.childForFieldName('value');
+  if (!valueNode) return null;
+
+  const fnNode = unwrapToFunctionLike(valueNode);
+  if (!fnNode) return null;
+
+  const paramsNode = fnNode.childForFieldName('parameters');
+  const bodyNode = fnNode.childForFieldName('body');
+  const paramCount = paramsNode ? paramsNode.namedChildren.length : 0;
+  const sigParams = paramsNode ? paramsNode.text.replace(/^\(|\)$/g, '') : '';
+  const name = nameNode ? nameNode.text : '<anonymous>';
+
+  return {
+    name,
+    signature: `${name}(${sigParams})`,
+    startLine: declarator.startPosition.row + 1,
+    endLine: declarator.endPosition.row + 1,
+    loc: countLoc(declarator.text),
+    bodyNode,
+    paramCount,
+    decorators,
+  };
+}
+
+/**
+ * Step through trivial wrappers to find the underlying function-like node.
+ * Recognises:
+ *   - `arrow_function`, `function_expression`, `generator_function`
+ *   - `call_expression(wrapper, arrow_function)` — common HOC pattern;
+ *     descends into the first function-shaped argument.
+ *   - `as`-cast wrappers (`(() => {}) as SomeType`)
+ *   - parenthesised expressions
+ */
+function unwrapToFunctionLike(node: Parser.SyntaxNode): Parser.SyntaxNode | null {
+  let current: Parser.SyntaxNode | null = node;
+  for (let i = 0; i < 4 && current; i++) {
+    if (
+      current.type === 'arrow_function' ||
+      current.type === 'function_expression' ||
+      current.type === 'function' ||
+      current.type === 'generator_function'
+    ) {
+      return current;
+    }
+    if (current.type === 'parenthesized_expression' || current.type === 'as_expression') {
+      current = current.namedChildren[0] ?? null;
+      continue;
+    }
+    if (current.type === 'call_expression') {
+      const args = current.childForFieldName('arguments');
+      if (!args) return null;
+      // First arg that is itself a function-like wins.
+      let chosen: Parser.SyntaxNode | null = null;
+      for (const arg of args.namedChildren) {
+        const inner = unwrapToFunctionLike(arg);
+        if (inner) {
+          chosen = inner;
+          break;
+        }
+      }
+      return chosen;
+    }
+    return null;
+  }
+  return null;
 }
 
 /**

@@ -18,6 +18,10 @@ export interface ScoreInput {
   hotSpotExcess?: number;
   /** Largest single-module fan-out, used for the hub-coupling penalty. */
   fanOutMax?: number;
+  /** Largest fan-in × fan-out across modules — flags god-modules (high consume + high provide). */
+  dualHubMax?: number;
+  /** Σ max(0, martinDistance - 0.5) over modules with abstractness defined; pain-zone aggregate. */
+  martinPainSum?: number;
   /** Σ (cohesionRatio_M × loc_M) across modules that produced a cohesion signal. */
   cohesionWeighted?: number;
   /** Σ loc_M for the same set of modules. */
@@ -46,10 +50,23 @@ export function computeScores(
 
   const avgFanOut = input.moduleCount > 0 ? input.fanOutTotal / input.moduleCount : 0;
   const fanOutMax = input.fanOutMax ?? 0;
+  const dualHubMax = input.dualHubMax ?? 0;
+  const martinPain = input.martinPainSum ?? 0;
   const cyclePenalty = input.cycleCount * 15;
   const avgPenalty = Math.max(0, avgFanOut - 1) * 10;
-  const hubPenalty = Math.max(0, fanOutMax - 5) * 4;
-  const couplingScore = clamp(100 - avgPenalty - hubPenalty - cyclePenalty);
+  // P4b: hub threshold scales with moduleCount so large repos aren't drowning
+  // in false-positive hubs and tiny repos still feel a floor.
+  const hubStart = Math.max(5, Math.ceil(input.moduleCount * 0.3));
+  const hubPenalty = Math.max(0, fanOutMax - hubStart) * 4;
+  // P4a: dual-hub = high fanIn × fanOut, the god-module signature. Threshold
+  // also scales with moduleCount so 4-module repos can't trigger it trivially.
+  const dualHubStart = Math.max(25, input.moduleCount * 4);
+  const dualHubPenalty = Math.max(0, dualHubMax - dualHubStart) * 1.5;
+  // P4c: Σ pain over modules above Martin distance 0.5.
+  const painPenalty = martinPain * 6;
+  const couplingScore = clamp(
+    100 - avgPenalty - hubPenalty - dualHubPenalty - painPenalty - cyclePenalty
+  );
 
   const cohesionWeighted = input.cohesionWeighted ?? 0;
   const moduleLocSum = input.moduleLocSum ?? 0;

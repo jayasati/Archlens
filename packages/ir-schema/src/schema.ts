@@ -84,6 +84,11 @@ export const ModuleSchema = z.object({
   files: z.array(FileSchema).default([]),
   tags: z.array(z.string()).default([]),
   cohesionRatio: z.number().min(0).max(1).optional(),
+  fanIn: NonNegInt.optional(),
+  fanOut: NonNegInt.optional(),
+  instability: z.number().min(0).max(1).optional(),
+  abstractness: z.number().min(0).max(1).optional(),
+  martinDistance: z.number().min(0).max(1).optional(),
 });
 
 export const EdgeSchema = z.object({
