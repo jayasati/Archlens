@@ -15,6 +15,7 @@ import { detectDeepNesting } from '../../metrics/smells/deep-nesting.js';
 import { detectGodClass } from '../../metrics/smells/god-class.js';
 import { detectLongMethod } from '../../metrics/smells/long-method.js';
 import { computeCoupling } from '../../metrics/coupling.js';
+import { computeModuleCohesion, type FileEdge } from '../../metrics/cohesion.js';
 import { computeScores } from '../../scoring/engine.js';
 import { mergeThresholds, mergeWeights } from '../../scoring/weights.default.js';
 import { scoreToGrade } from '../../scoring/grading.js';
@@ -84,6 +85,19 @@ function transformRunnerOutput(
   const moduleSpringInfo = new Map<string, SpringClassInfo[]>();
   const allSmells: Smell[] = [];
   const fileEdges: Edge[] = [];
+  const cohesionFileEdges: FileEdge[] = [];
+  const fileToModule = new Map<string, string>();
+  const moduleSizes = new Map<string, { loc: number; fileCount: number }>();
+  // Java imports are by FQN (package.Type) — build a map from importable package
+  // to a representative file path so cohesion can detect when an import lands
+  // inside the same module. We pick any one file per package; module assignment
+  // is by package anyway.
+  const packageToFile = new Map<string, string>();
+  for (const file of runner.files) {
+    if (file.packageName && !packageToFile.has(file.packageName)) {
+      packageToFile.set(file.packageName, file.relPath);
+    }
+  }
   let totalLoc = 0;
   let totalFunctions = 0;
   let totalClasses = 0;
@@ -113,6 +127,13 @@ function transformRunnerOutput(
   for (const file of runner.files) {
     const moduleName = moduleNameForPackage(file.packageName, file.relPath);
     const moduleId = `mod_${sanitize(moduleName)}`;
+
+    fileToModule.set(file.relPath, moduleId);
+    const existingSize = moduleSizes.get(moduleId) ?? { loc: 0, fileCount: 0 };
+    moduleSizes.set(moduleId, {
+      loc: existingSize.loc + file.loc,
+      fileCount: existingSize.fileCount + 1,
+    });
 
     const fileIR: FileIR = {
       id: `file_${slugifyPath(file.relPath)}`,
@@ -228,12 +249,14 @@ function transformRunnerOutput(
         tags: [],
       });
 
-    // Build module-level edges from imports.
+    // Build file-level edges for cohesion + module-level edges for coupling.
     for (const imp of file.imports) {
       const targetPackage = packageOfImport(imp.name);
       if (!targetPackage) continue;
       if (targetPackage.startsWith('java.') || targetPackage.startsWith('javax.')) continue;
       if (targetPackage.startsWith('org.springframework')) continue;
+      const targetFile = packageToFile.get(targetPackage);
+      if (targetFile) cohesionFileEdges.push({ fromFile: file.relPath, toFile: targetFile });
       const targetModuleName = moduleNameForPackage(targetPackage, '');
       const targetModuleId = `mod_${sanitize(targetModuleName)}`;
       if (targetModuleId === moduleId) continue;
@@ -262,6 +285,12 @@ function transformRunnerOutput(
   const fanOutTotal = fanOutValues.reduce((a, b) => a + b, 0);
   const fanOutMax = fanOutValues.length > 0 ? Math.max(...fanOutValues) : 0;
 
+  const cohesion = computeModuleCohesion(cohesionFileEdges, fileToModule, moduleSizes);
+  for (const [mid, ratio] of cohesion.ratios) {
+    const mod = modulesByName.get(mid);
+    if (mod) mod.cohesionRatio = ratio;
+  }
+
   const scores = computeScores(
     {
       totalLoc,
@@ -274,6 +303,8 @@ function transformRunnerOutput(
       fanOutMax,
       hotSpotCount,
       hotSpotExcess,
+      cohesionWeighted: cohesion.cohesionWeighted,
+      moduleLocSum: cohesion.moduleLocSum,
       smells: allSmells,
     },
     weights

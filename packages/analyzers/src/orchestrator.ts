@@ -154,11 +154,18 @@ export function mergeIRs(irs: Repo[], repoPath: string, config: AnalyzerConfig):
   let totalComplexity = 0;
   let hotSpotCount = 0;
   let hotSpotExcess = 0;
+  let cohesionWeighted = 0;
+  let moduleLocSum = 0;
 
   for (const ir of disambiguated) {
     for (const lang of ir.languages) languages.add(lang);
     for (const mod of ir.modules) {
       modules.push(mod);
+      if (mod.cohesionRatio !== undefined) {
+        const modLoc = mod.files.reduce((sum, f) => sum + f.loc, 0);
+        cohesionWeighted += mod.cohesionRatio * modLoc;
+        moduleLocSum += modLoc;
+      }
       for (const file of mod.files) {
         totalLoc += file.loc;
         for (const fn of file.functions) {
@@ -209,6 +216,8 @@ export function mergeIRs(irs: Repo[], repoPath: string, config: AnalyzerConfig):
       fanOutMax,
       hotSpotCount,
       hotSpotExcess,
+      cohesionWeighted,
+      moduleLocSum,
       smells: allSmells,
     },
     mergeWeights(config.weights)

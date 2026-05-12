@@ -18,6 +18,10 @@ export interface ScoreInput {
   hotSpotExcess?: number;
   /** Largest single-module fan-out, used for the hub-coupling penalty. */
   fanOutMax?: number;
+  /** Σ (cohesionRatio_M × loc_M) across modules that produced a cohesion signal. */
+  cohesionWeighted?: number;
+  /** Σ loc_M for the same set of modules. */
+  moduleLocSum?: number;
 }
 
 const SEVERITY_WEIGHT: Record<Severity, number> = {
@@ -47,9 +51,10 @@ export function computeScores(
   const hubPenalty = Math.max(0, fanOutMax - 5) * 4;
   const couplingScore = clamp(100 - avgPenalty - hubPenalty - cyclePenalty);
 
-  // Cohesion: still a fake signal until phase 2 wires in real internal-connectivity.
-  // Default weight is 0 so this dimension does not contribute to overall.
-  const cohesionScore = 100;
+  const cohesionWeighted = input.cohesionWeighted ?? 0;
+  const moduleLocSum = input.moduleLocSum ?? 0;
+  // No signal (every module is a leaf or single-file) → benefit of doubt, score 100.
+  const cohesionScore = moduleLocSum > 0 ? clamp((cohesionWeighted / moduleLocSum) * 100) : 100;
 
   const smellPenalty = input.smells.reduce((sum, s) => sum + SEVERITY_WEIGHT[s.severity], 0);
   const smellPerKloc = input.totalLoc > 0 ? (smellPenalty * 1000) / input.totalLoc : 0;

@@ -66,8 +66,9 @@ describe('computeScores', () => {
     expect(scores.coupling).toBeLessThan(85);
   });
 
-  it('cohesion and duplication contribute nothing by default (weight 0)', () => {
-    // A clean repo's overall should be a weighted blend of complexity / coupling / smells only.
+  it('benefit-of-doubt cohesion when no module produces a signal', () => {
+    // No cohesionWeighted/moduleLocSum passed → score defaults to 100.
+    // Duplication weight is 0 so it contributes nothing regardless.
     const scores = computeScores({
       totalLoc: 100,
       totalFunctions: 5,
@@ -78,10 +79,26 @@ describe('computeScores', () => {
       fanOutTotal: 1,
       smells: [],
     });
-    // complexity 100 * 0.4 + coupling 100 * 0.4 + smells 100 * 0.2 = 100.
     expect(scores.overall).toBe(100);
     expect(scores.cohesion).toBe(100);
     expect(scores.duplication).toBe(100);
+  });
+
+  it('uses provided cohesion fields when signal is present', () => {
+    // 60% cohesion weighted average → score 60.
+    const scores = computeScores({
+      totalLoc: 100,
+      totalFunctions: 5,
+      totalClasses: 0,
+      totalComplexity: 5,
+      cycleCount: 0,
+      moduleCount: 2,
+      fanOutTotal: 1,
+      cohesionWeighted: 60,
+      moduleLocSum: 100,
+      smells: [],
+    });
+    expect(scores.cohesion).toBe(60);
   });
 });
 

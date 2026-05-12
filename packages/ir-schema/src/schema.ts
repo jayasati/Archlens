@@ -82,6 +82,7 @@ export const ModuleSchema = z.object({
   virtual: z.boolean().default(false),
   files: z.array(FileSchema).default([]),
   tags: z.array(z.string()).default([]),
+  cohesionRatio: z.number().min(0).max(1).optional(),
 });
 
 export const EdgeSchema = z.object({

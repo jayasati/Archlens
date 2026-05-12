@@ -10,6 +10,13 @@ export interface TsconfigPaths {
   paths: Record<string, string[]>;
 }
 
+export interface WorkspaceAlias {
+  /** `name` field from the workspace's package.json (e.g. `@archlens/shared-types`). */
+  packageName: string;
+  /** POSIX-style path relative to the repo root (e.g. `packages/shared-types`). */
+  relPath: string;
+}
+
 export interface NodeFileIndex {
   /** All known source files as POSIX-style relative paths from repo root. */
   relPaths: Set<string>;
@@ -17,6 +24,8 @@ export interface NodeFileIndex {
   absSet: Set<string>;
   /** repoRoot in absolute form. */
   repoRoot: string;
+  /** Workspaces in the monorepo (empty for single-package repos). */
+  workspaces: WorkspaceAlias[];
 }
 
 const RESOLVE_EXTS = ['.ts', '.tsx', '.mts', '.cts', '.js', '.jsx', '.mjs', '.cjs', '.d.ts'];
@@ -51,12 +60,16 @@ export async function loadTsconfig(repoRoot: string): Promise<TsconfigPaths | nu
   return null;
 }
 
-export function buildNodeFileIndex(repoRoot: string, relPaths: string[]): NodeFileIndex {
+export function buildNodeFileIndex(
+  repoRoot: string,
+  relPaths: string[],
+  workspaces: WorkspaceAlias[] = []
+): NodeFileIndex {
   const absRepo = path.resolve(repoRoot);
   const relSet = new Set(relPaths.map(toPosix));
   const absSet = new Set<string>();
   for (const rel of relSet) absSet.add(path.resolve(absRepo, rel));
-  return { relPaths: relSet, absSet, repoRoot: absRepo };
+  return { relPaths: relSet, absSet, repoRoot: absRepo, workspaces };
 }
 
 /**
@@ -90,7 +103,33 @@ export function resolveNodeImport(
     }
   }
 
-  // Bare specifier with no matching alias — assume external (node_modules).
+  // Workspace cross-package import: `@scope/name` or `@scope/name/subpath`
+  // resolves to the workspace's source tree. Convention: TypeScript sources
+  // live in `src/`, so try that first, then a flat layout.
+  for (const ws of index.workspaces) {
+    const subpath = matchWorkspaceSubpath(specifier, ws.packageName);
+    if (subpath === null) continue;
+    const tail = subpath === '' ? 'index' : subpath;
+    const candidates = [
+      path.resolve(index.repoRoot, ws.relPath, 'src', tail),
+      path.resolve(index.repoRoot, ws.relPath, tail),
+    ];
+    for (const c of candidates) {
+      const hit = probeFileTarget(c, index);
+      if (hit) return hit;
+    }
+    // Matched the workspace name but couldn't locate the source — give up
+    // rather than fall through to other workspaces with the same prefix.
+    return null;
+  }
+
+  // Bare specifier with no matching alias or workspace — assume external.
+  return null;
+}
+
+function matchWorkspaceSubpath(specifier: string, packageName: string): string | null {
+  if (specifier === packageName) return '';
+  if (specifier.startsWith(packageName + '/')) return specifier.slice(packageName.length + 1);
   return null;
 }
 
@@ -119,6 +158,16 @@ function matchPattern(pattern: string, specifier: string): string | null {
   return middle;
 }
 
+// TypeScript ESM imports a `.ts` source as `./foo.js` so the emitted JS stays
+// valid. The file index only sees the `.ts` source, so map the import's .js
+// extension back to its likely TypeScript twin before giving up.
+const TS_EXT_FOR_JS: Record<string, readonly string[]> = {
+  '.js': ['.ts', '.tsx'],
+  '.jsx': ['.tsx', '.ts'],
+  '.mjs': ['.mts'],
+  '.cjs': ['.cts'],
+};
+
 function probeFileTarget(absTarget: string, index: NodeFileIndex): string | null {
   // Direct file hit.
   if (index.absSet.has(absTarget)) return toRel(absTarget, index.repoRoot);
@@ -127,6 +176,17 @@ function probeFileTarget(absTarget: string, index: NodeFileIndex): string | null
   for (const ext of RESOLVE_EXTS) {
     const withExt = absTarget + ext;
     if (index.absSet.has(withExt)) return toRel(withExt, index.repoRoot);
+  }
+
+  // Rewrite trailing .js/.mjs/.cjs/.jsx to its TypeScript source equivalent.
+  const jsMatch = absTarget.match(/\.(m?js|cjs|jsx)$/);
+  if (jsMatch) {
+    const stem = absTarget.slice(0, -jsMatch[0].length);
+    const tsExts = TS_EXT_FOR_JS['.' + jsMatch[1]!] ?? [];
+    for (const tsExt of tsExts) {
+      const candidate = stem + tsExt;
+      if (index.absSet.has(candidate)) return toRel(candidate, index.repoRoot);
+    }
   }
 
   // Try as directory with index file.

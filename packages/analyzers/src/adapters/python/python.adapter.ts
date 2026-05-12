@@ -16,6 +16,7 @@ import { detectDeepNesting } from '../../metrics/smells/deep-nesting.js';
 import { detectGodClass } from '../../metrics/smells/god-class.js';
 import { detectLongMethod } from '../../metrics/smells/long-method.js';
 import { computeCoupling } from '../../metrics/coupling.js';
+import { computeModuleCohesion, type FileEdge } from '../../metrics/cohesion.js';
 import { computeScores } from '../../scoring/engine.js';
 import { mergeThresholds, mergeWeights } from '../../scoring/weights.default.js';
 import { scoreToGrade } from '../../scoring/grading.js';
@@ -63,6 +64,8 @@ export class PythonAdapter implements Adapter {
     const files = await collectPythonFiles(absRepo, config.exclude ?? []);
     const relPaths = files.map((f) => f.relPath);
     const moduleIndex = buildModuleIndex(relPaths);
+    const dottedToFile = new Map<string, string>();
+    for (const [relPath, dotted] of moduleIndex.byPath) dottedToFile.set(dotted, relPath);
 
     const parsedFiles: ParsedFile[] = [];
     for (const file of files) {
@@ -73,6 +76,9 @@ export class PythonAdapter implements Adapter {
 
     const modulesByName = new Map<string, Module>();
     const fileEdges: Edge[] = [];
+    const cohesionFileEdges: FileEdge[] = [];
+    const fileToModule = new Map<string, string>();
+    const moduleSizes = new Map<string, { loc: number; fileCount: number }>();
     let totalLoc = 0;
     let totalFunctions = 0;
     let totalClasses = 0;
@@ -86,6 +92,13 @@ export class PythonAdapter implements Adapter {
       const dotted = pathToDotted(parsed.relPath);
       const moduleName = topPackage(dotted);
       const moduleId = `mod_${moduleName}`;
+
+      fileToModule.set(parsed.relPath, moduleId);
+      const existingSize = moduleSizes.get(moduleId) ?? { loc: 0, fileCount: 0 };
+      moduleSizes.set(moduleId, {
+        loc: existingSize.loc + parsed.loc,
+        fileCount: existingSize.fileCount + 1,
+      });
 
       const fileIR: FileIR = {
         id: `file_${dotted.replace(/\./g, '_') || 'root'}`,
@@ -249,10 +262,12 @@ export class PythonAdapter implements Adapter {
         });
       }
 
-      // resolve imports → module-level edges
+      // resolve imports → file-level edges for cohesion + module-level edges for coupling
       for (const imp of parsed.imports) {
         const targetDotted = resolveImport(parsed.relPath, imp, moduleIndex);
         if (!targetDotted) continue;
+        const targetFile = dottedToFile.get(targetDotted);
+        if (targetFile) cohesionFileEdges.push({ fromFile: parsed.relPath, toFile: targetFile });
         const targetModule = `mod_${topPackage(targetDotted)}`;
         if (targetModule === moduleId) continue;
         fileEdges.push({
@@ -276,6 +291,12 @@ export class PythonAdapter implements Adapter {
     const fanOutTotal = fanOutValues.reduce((a, b) => a + b, 0);
     const fanOutMax = fanOutValues.length > 0 ? Math.max(...fanOutValues) : 0;
 
+    const cohesion = computeModuleCohesion(cohesionFileEdges, fileToModule, moduleSizes);
+    for (const [mid, ratio] of cohesion.ratios) {
+      const mod = modulesByName.get(mid);
+      if (mod) mod.cohesionRatio = ratio;
+    }
+
     // attach class fanIn/fanOut at module level (kept zero for individual classes — not yet wired)
 
     const scores = computeScores(
@@ -290,6 +311,8 @@ export class PythonAdapter implements Adapter {
         fanOutMax,
         hotSpotCount,
         hotSpotExcess,
+        cohesionWeighted: cohesion.cohesionWeighted,
+        moduleLocSum: cohesion.moduleLocSum,
         smells: allSmells,
       },
       weights

@@ -17,6 +17,7 @@ import { detectDeepNesting } from '../../metrics/smells/deep-nesting.js';
 import { detectGodClass } from '../../metrics/smells/god-class.js';
 import { detectLongMethod } from '../../metrics/smells/long-method.js';
 import { computeCoupling } from '../../metrics/coupling.js';
+import { computeModuleCohesion, type FileEdge } from '../../metrics/cohesion.js';
 import { computeScores } from '../../scoring/engine.js';
 import { mergeThresholds, mergeWeights } from '../../scoring/weights.default.js';
 import { scoreToGrade } from '../../scoring/grading.js';
@@ -76,9 +77,13 @@ export class NodeAdapter implements Adapter {
 
     const files = await collectNodeFiles(absRepo, config.exclude ?? []);
     const relPaths = files.map((f) => f.relPath);
-    const fileIndex = buildNodeFileIndex(absRepo, relPaths);
-    const tsconfig = await loadTsconfig(absRepo);
     const workspaces = await detectNodeWorkspaces(absRepo);
+    const fileIndex = buildNodeFileIndex(
+      absRepo,
+      relPaths,
+      workspaces.map((w) => ({ packageName: w.packageName, relPath: w.relPath }))
+    );
+    const tsconfig = await loadTsconfig(absRepo);
 
     const parsedFiles: Array<ParsedFile> = [];
     for (const file of files) {
@@ -105,6 +110,9 @@ export class NodeAdapter implements Adapter {
     const modulesByName = new Map<string, Module>();
     const moduleClassInfo = new Map<string, NestClassInfo[]>();
     const fileEdges: Edge[] = [];
+    const cohesionFileEdges: FileEdge[] = [];
+    const fileToModule = new Map<string, string>();
+    const moduleSizes = new Map<string, { loc: number; fileCount: number }>();
     let totalLoc = 0;
     let totalFunctions = 0;
     let totalClasses = 0;
@@ -115,6 +123,12 @@ export class NodeAdapter implements Adapter {
 
     for (const parsed of parsedFiles) {
       const { moduleId, moduleName } = resolveModule(parsed.relPath, workspaces);
+      fileToModule.set(parsed.relPath, moduleId);
+      const existingSize = moduleSizes.get(moduleId) ?? { loc: 0, fileCount: 0 };
+      moduleSizes.set(moduleId, {
+        loc: existingSize.loc + parsed.loc,
+        fileCount: existingSize.fileCount + 1,
+      });
 
       const fileIR: FileIR = {
         id: `file_${slugifyPath(parsed.relPath)}`,
@@ -275,10 +289,13 @@ export class NodeAdapter implements Adapter {
         });
       }
 
-      // Resolve every import to a known repo file → emit a module-level edge.
+      // Resolve every import to a known repo file. Track file-level edges
+      // (including intra-module) for cohesion; emit module-level edges only
+      // when they cross module boundaries.
       for (const imp of parsed.imports) {
         const resolvedRel = resolveNodeImport(parsed.relPath, imp.source, fileIndex, tsconfig);
         if (!resolvedRel) continue;
+        cohesionFileEdges.push({ fromFile: parsed.relPath, toFile: resolvedRel });
         const target = resolveModule(resolvedRel, workspaces);
         if (target.moduleId === moduleId) continue;
         fileEdges.push({ from: moduleId, to: target.moduleId, kind: 'import', weight: 1 });
@@ -303,6 +320,12 @@ export class NodeAdapter implements Adapter {
     const fanOutTotal = fanOutValues.reduce((a, b) => a + b, 0);
     const fanOutMax = fanOutValues.length > 0 ? Math.max(...fanOutValues) : 0;
 
+    const cohesion = computeModuleCohesion(cohesionFileEdges, fileToModule, moduleSizes);
+    for (const [mid, ratio] of cohesion.ratios) {
+      const mod = modulesByName.get(mid);
+      if (mod) mod.cohesionRatio = ratio;
+    }
+
     const scores = computeScores(
       {
         totalLoc,
@@ -315,6 +338,8 @@ export class NodeAdapter implements Adapter {
         fanOutMax,
         hotSpotCount,
         hotSpotExcess,
+        cohesionWeighted: cohesion.cohesionWeighted,
+        moduleLocSum: cohesion.moduleLocSum,
         smells: allSmells,
       },
       weights
