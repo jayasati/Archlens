@@ -31,6 +31,11 @@ import {
   moduleTagsFromClasses,
   type NestClassInfo,
 } from './frameworks/nestjs.js';
+import {
+  detectNodeWorkspaces,
+  workspaceForFile,
+  type NodeWorkspace,
+} from './workspace-detector.js';
 
 const DEFAULT_EXCLUDES = [
   'node_modules',
@@ -42,6 +47,17 @@ const DEFAULT_EXCLUDES = [
   'out',
   'coverage',
   '.cache',
+  'test',
+  'tests',
+  '__tests__',
+  '__mocks__',
+  'fixtures',
+  '__fixtures__',
+  'e2e',
+  'static',
+  'public',
+  'assets',
+  'resources',
 ];
 
 const SOURCE_EXTS = new Set(['.ts', '.tsx', '.mts', '.cts', '.js', '.jsx', '.mjs', '.cjs']);
@@ -62,6 +78,7 @@ export class NodeAdapter implements Adapter {
     const relPaths = files.map((f) => f.relPath);
     const fileIndex = buildNodeFileIndex(absRepo, relPaths);
     const tsconfig = await loadTsconfig(absRepo);
+    const workspaces = await detectNodeWorkspaces(absRepo);
 
     const parsedFiles: Array<ParsedFile> = [];
     for (const file of files) {
@@ -95,8 +112,7 @@ export class NodeAdapter implements Adapter {
     const allSmells: Smell[] = [];
 
     for (const parsed of parsedFiles) {
-      const moduleName = moduleNameForPath(parsed.relPath);
-      const moduleId = `mod_${moduleName}`;
+      const { moduleId, moduleName } = resolveModule(parsed.relPath, workspaces);
 
       const fileIR: FileIR = {
         id: `file_${slugifyPath(parsed.relPath)}`,
@@ -253,9 +269,9 @@ export class NodeAdapter implements Adapter {
       for (const imp of parsed.imports) {
         const resolvedRel = resolveNodeImport(parsed.relPath, imp.source, fileIndex, tsconfig);
         if (!resolvedRel) continue;
-        const targetModule = `mod_${moduleNameForPath(resolvedRel)}`;
-        if (targetModule === moduleId) continue;
-        fileEdges.push({ from: moduleId, to: targetModule, kind: 'import', weight: 1 });
+        const target = resolveModule(resolvedRel, workspaces);
+        if (target.moduleId === moduleId) continue;
+        fileEdges.push({ from: moduleId, to: target.moduleId, kind: 'import', weight: 1 });
       }
     }
 
@@ -356,20 +372,33 @@ function aggregateEdges(edges: Edge[]): Edge[] {
 }
 
 /**
- * Group files into modules. We strip a leading `src/` and use the first
- * remaining path segment as the module name. Files at the root land in
- * their own single-file modules named after the file basename.
+ * Pick a module for a file. If the file lives inside a detected pnpm/npm/yarn
+ * workspace, use that workspace as the module — so a monorepo's `apps/api/...`
+ * and `apps/web/...` end up in distinct modules instead of being lumped under
+ * a generic `mod_apps`. Otherwise fall back to the legacy "first segment
+ * after `src/`" heuristic for single-package repos.
+ */
+export function resolveModule(
+  relPath: string,
+  workspaces: NodeWorkspace[]
+): { moduleId: string; moduleName: string } {
+  const ws = workspaceForFile(relPath, workspaces);
+  if (ws) return { moduleId: ws.moduleId, moduleName: ws.displayName };
+  const name = moduleNameForPath(relPath);
+  return { moduleId: `mod_${name}`, moduleName: name };
+}
+
+/**
+ * Single-package fallback used when no workspace contains the file. Strips a
+ * leading `src/` and uses the first remaining path segment. Files at the
+ * repo root land in their own single-file modules named after the file
+ * basename.
  */
 export function moduleNameForPath(relPath: string): string {
   const norm = relPath.replace(/\\/g, '/');
   const stripped = norm.replace(/^src\//, '');
   const parts = stripped.split('/').filter((s) => s.length > 0);
-  if (parts.length === 0) return '_root';
-  if (parts.length === 1) {
-    // root-level file; module name = basename without extension
-    const base = parts[0]!.replace(/\.[^.]+$/, '');
-    return sanitize(base);
-  }
+  if (parts.length <= 1) return '_root';
   return sanitize(parts[0]!);
 }
 

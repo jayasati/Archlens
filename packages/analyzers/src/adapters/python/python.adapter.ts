@@ -35,6 +35,16 @@ const DEFAULT_EXCLUDES = [
   'build',
   '.pytest_cache',
   '.tox',
+  'test',
+  'tests',
+  '__tests__',
+  'fixtures',
+  '__fixtures__',
+  'e2e',
+  'static',
+  'public',
+  'assets',
+  'resources',
 ];
 
 export class PythonAdapter implements Adapter {
@@ -318,6 +328,8 @@ async function collectPythonFiles(repoPath: string, userExcludes: string[]): Pro
       if (entry.isDirectory()) {
         await walk(abs);
       } else if (entry.isFile() && entry.name.endsWith('.py')) {
+        if (entry.name.startsWith('test_') || entry.name.endsWith('_test.py')) continue;
+        if (entry.name === 'conftest.py') continue;
         const rel = path.relative(repoPath, abs).split(path.sep).join('/');
         out.push({ absPath: abs, relPath: rel });
       }

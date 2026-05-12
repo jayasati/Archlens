@@ -63,6 +63,16 @@ public final class JavaParserRunner {
     SKIP_DIRS.add(".idea");
     SKIP_DIRS.add("node_modules");
     SKIP_DIRS.add(".mvn");
+    SKIP_DIRS.add("test");
+    SKIP_DIRS.add("tests");
+    SKIP_DIRS.add("__tests__");
+    SKIP_DIRS.add("fixtures");
+    SKIP_DIRS.add("__fixtures__");
+    SKIP_DIRS.add("e2e");
+    SKIP_DIRS.add("static");
+    SKIP_DIRS.add("public");
+    SKIP_DIRS.add("assets");
+    SKIP_DIRS.add("resources");
   }
 
   public static void main(String[] args) throws Exception {
