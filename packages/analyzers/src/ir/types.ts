@@ -8,6 +8,7 @@ export type {
   Smell,
   Edge,
   EdgeKind,
+  Cycle,
   ScoreBreakdown,
   Grade,
   Severity,

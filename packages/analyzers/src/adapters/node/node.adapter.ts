@@ -59,6 +59,7 @@ const DEFAULT_EXCLUDES = [
   'public',
   'assets',
   'resources',
+  'sample-projects',
 ];
 
 const SOURCE_EXTS = new Set(['.ts', '.tsx', '.mts', '.cts', '.js', '.jsx', '.mjs', '.cjs']);
@@ -66,6 +67,15 @@ const SOURCE_EXTS = new Set(['.ts', '.tsx', '.mts', '.cts', '.js', '.jsx', '.mjs
 export class NodeAdapter implements Adapter {
   /** The adapter declares `typescript` as its primary language; JS files are folded in. */
   readonly language: Language = 'typescript';
+  readonly capabilities = {
+    complexity: true,
+    cohesion: true,
+    coupling: true,
+    smells: true,
+    // TS uses `interface` ubiquitously for structural types (prop shapes, options
+    // bags), so Martin abstractness misfires here. Restricted to Java in P6.
+    abstractness: false,
+  } as const;
 
   async analyze(repoPath: string, config: AnalyzerConfig): Promise<Repo> {
     const absRepo = path.resolve(repoPath);
@@ -84,6 +94,26 @@ export class NodeAdapter implements Adapter {
       workspaces.map((w) => ({ packageName: w.packageName, relPath: w.relPath }))
     );
     const tsconfig = await loadTsconfig(absRepo);
+
+    // Pre-bucket every file by its containing workspace so resolveModule can
+    // decide whether to sub-split. Workspaces are matched longest-first so a
+    // nested workspace wins over its parent.
+    const filesByWorkspace = new Map<string, Set<string>>();
+    // Inverse map: file → workspace module ID. Used by the cohesion metric
+    // to identify "edges that stay within the same workspace" (sibling
+    // submodules count as internal at workspace level).
+    const fileToWorkspace = new Map<string, string>();
+    for (const f of files) {
+      const ws = workspaceForFile(f.relPath, workspaces);
+      if (!ws) continue;
+      let bucket = filesByWorkspace.get(ws.moduleId);
+      if (!bucket) {
+        bucket = new Set();
+        filesByWorkspace.set(ws.moduleId, bucket);
+      }
+      bucket.add(f.relPath);
+      fileToWorkspace.set(f.relPath, ws.moduleId);
+    }
 
     const parsedFiles: Array<ParsedFile> = [];
     for (const file of files) {
@@ -126,7 +156,7 @@ export class NodeAdapter implements Adapter {
     const allSmells: Smell[] = [];
 
     for (const parsed of parsedFiles) {
-      const { moduleId, moduleName } = resolveModule(parsed.relPath, workspaces);
+      const { moduleId, moduleName } = resolveModule(parsed.relPath, workspaces, filesByWorkspace);
       fileToModule.set(parsed.relPath, moduleId);
       const existingSize = moduleSizes.get(moduleId) ?? { loc: 0, fileCount: 0 };
       moduleSizes.set(moduleId, {
@@ -300,7 +330,7 @@ export class NodeAdapter implements Adapter {
         const resolvedRel = resolveNodeImport(parsed.relPath, imp.source, fileIndex, tsconfig);
         if (!resolvedRel) continue;
         cohesionFileEdges.push({ fromFile: parsed.relPath, toFile: resolvedRel });
-        const target = resolveModule(resolvedRel, workspaces);
+        const target = resolveModule(resolvedRel, workspaces, filesByWorkspace);
         if (target.moduleId === moduleId) continue;
         fileEdges.push({ from: moduleId, to: target.moduleId, kind: 'import', weight: 1 });
       }
@@ -324,10 +354,19 @@ export class NodeAdapter implements Adapter {
     const fanOutTotal = fanOutValues.reduce((a, b) => a + b, 0);
     const couplingSummary = enrichModuleCoupling(modules, coupling);
 
-    const cohesion = computeModuleCohesion(cohesionFileEdges, fileToModule, moduleSizes);
+    const cohesion = computeModuleCohesion(
+      cohesionFileEdges,
+      fileToModule,
+      moduleSizes,
+      fileToWorkspace
+    );
     for (const [mid, ratio] of cohesion.ratios) {
       const mod = modulesByName.get(mid);
       if (mod) mod.cohesionRatio = ratio;
+    }
+    for (const [mid, ratio] of cohesion.groupRatios) {
+      const mod = modulesByName.get(mid);
+      if (mod) mod.workspaceCohesionRatio = ratio;
     }
 
     const scores = computeScores(
@@ -358,6 +397,7 @@ export class NodeAdapter implements Adapter {
       languages: Array.from(languagesPresent).sort() as Language[],
       modules,
       edges: aggregatedEdges,
+      cycles: cycles.length > 0 ? cycles : undefined,
       scoreBreakdown: scores,
       grade: scoreToGrade(scores.overall),
     };
@@ -418,19 +458,108 @@ function aggregateEdges(edges: Edge[]): Edge[] {
 
 /**
  * Pick a module for a file. If the file lives inside a detected pnpm/npm/yarn
- * workspace, use that workspace as the module — so a monorepo's `apps/api/...`
- * and `apps/web/...` end up in distinct modules instead of being lumped under
- * a generic `mod_apps`. Otherwise fall back to the legacy "first segment
- * after `src/`" heuristic for single-package repos.
+ * workspace AND that workspace's `src/` has ≥2 distinct first-level
+ * subdirectories, split the workspace into per-subdirectory modules
+ * (`backend/src/controllers/foo.js` → `mod_backend_controllers`). A workspace
+ * with a flat layout stays as one module.
+ *
+ * The `wsFiles` argument is the set of POSIX-style relative paths of every
+ * file inside the workspace (repo-relative). When absent we fall back to the
+ * legacy "workspace = module" behaviour, which is what tests that don't care
+ * about sub-splitting rely on.
  */
 export function resolveModule(
   relPath: string,
-  workspaces: NodeWorkspace[]
+  workspaces: NodeWorkspace[],
+  wsFiles?: Map<string, Set<string>>
 ): { moduleId: string; moduleName: string } {
   const ws = workspaceForFile(relPath, workspaces);
-  if (ws) return { moduleId: ws.moduleId, moduleName: ws.displayName };
+  if (ws) {
+    if (wsFiles) {
+      const files = wsFiles.get(ws.moduleId);
+      if (files && shouldSubSplit(files, ws.relPath)) {
+        const sub = subPathForFile(relPath, ws.relPath, files);
+        if (sub) {
+          return {
+            moduleId: `${ws.moduleId}_${sanitize(sub.replace(/\//g, '_'))}`,
+            moduleName: `${ws.displayName}/${sub}`,
+          };
+        }
+      }
+    }
+    return { moduleId: ws.moduleId, moduleName: ws.displayName };
+  }
   const name = moduleNameForPath(relPath);
   return { moduleId: `mod_${name}`, moduleName: name };
+}
+
+/**
+ * A workspace is worth sub-splitting when its primary source directory holds
+ * at least 2 distinct subdirectories. We look at `<workspace>/src/` if it
+ * exists, otherwise the workspace root. Workspaces with one big flat src/ or
+ * a single subdir aren't worth fragmenting.
+ */
+function shouldSubSplit(files: Set<string>, wsRel: string): boolean {
+  const prefix = `${wsRel}/`;
+  const srcPrefix = `${wsRel}/src/`;
+  // Determine the base directory we're inspecting.
+  let hasSrc = false;
+  for (const f of files) {
+    if (f.startsWith(srcPrefix)) {
+      hasSrc = true;
+      break;
+    }
+  }
+  const base = hasSrc ? srcPrefix : prefix;
+  const firstLevelDirs = new Set<string>();
+  for (const f of files) {
+    if (!f.startsWith(base)) continue;
+    const remainder = f.slice(base.length);
+    const slash = remainder.indexOf('/');
+    if (slash > 0) firstLevelDirs.add(remainder.slice(0, slash));
+    if (firstLevelDirs.size >= 2) return true;
+  }
+  return false;
+}
+
+/**
+ * Find the submodule path for a file, descending through any directories that
+ * contain only subdirectories (no direct files) and stopping at the shallowest
+ * directory that holds actual files. Returns `null` when the file lives at the
+ * workspace root (e.g. `src/app.js` directly under `src/`).
+ */
+function subPathForFile(fileRel: string, wsRel: string, wsFiles: Set<string>): string | null {
+  const wsRelative = fileRel.slice(wsRel.length + 1);
+  const hasSrcPrefix = wsRelative.startsWith('src/');
+  const afterSrc = hasSrcPrefix ? wsRelative.slice(4) : wsRelative;
+  const segs = afterSrc.split('/').filter((s) => s.length > 0);
+  if (segs.length <= 1) return null;
+
+  // Coordinate-space prefix that matches entries in `wsFiles` (which are repo-
+  // relative). For each candidate sub-path we test "does this dir contain
+  // direct files?" by scanning the set.
+  const fileSpaceBase = hasSrcPrefix ? `${wsRel}/src/` : `${wsRel}/`;
+
+  let candidate = '';
+  for (let i = 0; i < segs.length - 1; i++) {
+    candidate = candidate ? `${candidate}/${segs[i]}` : segs[i]!;
+    const dirPrefix = `${fileSpaceBase}${candidate}/`;
+    if (directoryHasDirectFile(wsFiles, dirPrefix)) {
+      return candidate;
+    }
+  }
+  // Reached the file's own parent directory without finding direct files
+  // higher up — use the deepest available prefix.
+  return candidate || null;
+}
+
+function directoryHasDirectFile(files: Set<string>, dirPrefix: string): boolean {
+  for (const f of files) {
+    if (!f.startsWith(dirPrefix)) continue;
+    const remainder = f.slice(dirPrefix.length);
+    if (!remainder.includes('/')) return true;
+  }
+  return false;
 }
 
 /**

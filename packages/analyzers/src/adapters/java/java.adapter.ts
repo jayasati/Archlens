@@ -50,6 +50,16 @@ export interface JavaAdapterOptions extends JavaParserRunnerOptions {}
 
 export class JavaAdapter implements Adapter {
   readonly language: Language = 'java';
+  readonly capabilities = {
+    complexity: true,
+    // Java's import-only cohesion underreports: same-package refs need no
+    // `import`, so module-internal edges are systemically missed. Flagged
+    // as not-meaningful until type-reference analysis lands.
+    cohesion: false,
+    coupling: true,
+    smells: true,
+    abstractness: true,
+  } as const;
 
   constructor(private readonly options: JavaAdapterOptions = {}) {}
 
@@ -310,7 +320,10 @@ function transformRunnerOutput(
   const cohesion = computeModuleCohesion(cohesionFileEdges, fileToModule, moduleSizes);
   for (const [mid, ratio] of cohesion.ratios) {
     const mod = modulesByName.get(mid);
-    if (mod) mod.cohesionRatio = ratio;
+    if (mod) {
+      mod.cohesionRatio = ratio;
+      mod.workspaceCohesionRatio = ratio;
+    }
   }
 
   const scores = computeScores(
@@ -342,6 +355,7 @@ function transformRunnerOutput(
     languages: ['java'],
     modules,
     edges: aggregatedEdges,
+    cycles: cycles.length > 0 ? cycles : undefined,
     scoreBreakdown: scores,
     grade: scoreToGrade(scores.overall),
   };

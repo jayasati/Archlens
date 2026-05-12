@@ -21,6 +21,7 @@ import { getReportSummaryServer, listReportModulesServer } from '@/lib/api/repor
 import { RescanButton } from '@/components/scan/rescan-button';
 import { scoreToGrade } from '@/lib/utils/grade';
 import { formatScore, formatRatio, formatOptionalInt } from '@/lib/utils/format';
+import { classifyModuleShape } from '@/lib/utils/module-shape';
 
 interface PageProps {
   params: { owner: string; name: string };
@@ -134,11 +135,36 @@ export default async function RepoOverviewPage({ params }: PageProps) {
           Ratings
         </h2>
         <div className="grid grid-cols-2 gap-4 md:grid-cols-5">
-          <RatingTile label="Complexity" score={sb.complexity} />
-          <RatingTile label="Duplication" score={sb.duplication} />
-          <RatingTile label="Coupling" score={sb.coupling} />
-          <RatingTile label="Cohesion" score={sb.cohesion} />
-          <RatingTile label="Smells" score={sb.smells} />
+          <RatingTile
+            label="Complexity"
+            score={sb.complexity}
+            note={sb.measurementNotes?.complexity}
+            derivation={sb.derivation?.complexity}
+          />
+          <RatingTile
+            label="Duplication"
+            score={sb.duplication}
+            note={sb.measurementNotes?.duplication}
+            derivation={sb.derivation?.duplication}
+          />
+          <RatingTile
+            label="Coupling"
+            score={sb.coupling}
+            note={sb.measurementNotes?.coupling}
+            derivation={sb.derivation?.coupling}
+          />
+          <RatingTile
+            label="Cohesion"
+            score={sb.cohesion}
+            note={sb.measurementNotes?.cohesion}
+            derivation={sb.derivation?.cohesion}
+          />
+          <RatingTile
+            label="Smells"
+            score={sb.smells}
+            note={sb.measurementNotes?.smells}
+            derivation={sb.derivation?.smells}
+          />
         </div>
       </section>
 
@@ -146,79 +172,164 @@ export default async function RepoOverviewPage({ params }: PageProps) {
         <h2 className="mb-3 text-sm font-semibold uppercase tracking-wide text-muted-foreground">
           Modules
         </h2>
-        <Card>
-          <Table>
-            <TableHeader>
-              <TableRow>
-                <TableHead>Module</TableHead>
-                <TableHead className="text-right">Files</TableHead>
-                <TableHead className="text-right">LOC</TableHead>
-                <TableHead className="text-right">Avg cx</TableHead>
-                <TableHead className="text-right">Smells</TableHead>
-                <TableHead className="text-right" title="Fan-in: # modules importing this one">
-                  In
-                </TableHead>
-                <TableHead className="text-right" title="Fan-out: # modules this one imports">
-                  Out
-                </TableHead>
-                <TableHead
-                  className="text-right"
-                  title="Internal-edge / total-edge ratio. Higher = more self-contained."
-                >
-                  Cohesion
-                </TableHead>
-                <TableHead
-                  className="text-right"
-                  title="Martin's I = fanOut / (fanIn + fanOut). 0 = stable provider, 1 = volatile consumer."
-                >
-                  Instab
-                </TableHead>
+        <ModulesTable modules={modules} />
+      </section>
+
+      {summary.cycles && summary.cycles.length > 0 ? (
+        <section data-testid="dependency-cycles">
+          <h2 className="mb-3 text-sm font-semibold uppercase tracking-wide text-muted-foreground">
+            Dependency cycles
+          </h2>
+          <Card className="p-4">
+            <div className="mb-2 text-sm text-muted-foreground">
+              {summary.cycles.length} circular dependency
+              {summary.cycles.length === 1 ? '' : ' chains'} detected. Each cycle penalises the
+              coupling score by 15 points.
+            </div>
+            <ul className="space-y-2 font-mono text-sm">
+              {summary.cycles.map((c, i) => (
+                <li key={i} className="flex items-center gap-2">
+                  <span className="rounded bg-red-100 px-2 py-0.5 text-xs font-semibold text-red-700 dark:bg-red-950 dark:text-red-300">
+                    cycle {i + 1}
+                  </span>
+                  <span>{[...c.moduleNames, c.moduleNames[0]].join(' → ')}</span>
+                </li>
+              ))}
+            </ul>
+          </Card>
+        </section>
+      ) : null}
+    </div>
+  );
+}
+
+function ModulesTable({ modules }: { modules: ReportModuleScoreDto[] }) {
+  if (modules.length === 0) {
+    return (
+      <Card>
+        <Table>
+          <TableBody>
+            <TableRow>
+              <TableCell className="text-center text-muted-foreground">
+                No modules detected.
+              </TableCell>
+            </TableRow>
+          </TableBody>
+        </Table>
+      </Card>
+    );
+  }
+
+  // Split: single-file modules go to a collapsed group; multi-file modules
+  // populate the main table.
+  const primary = modules.filter((m) => m.fileCount > 1);
+  const small = modules.filter((m) => m.fileCount <= 1);
+  // Auto-hide D-main column when no module reports a value — keeps the table
+  // tidy on Node/Python-only repos where abstractness isn't computed.
+  const showDMain = primary.some((m) => m.martinDistance !== undefined);
+
+  return (
+    <div className="space-y-4">
+      <Card>
+        <Table>
+          <TableHeader>
+            <TableRow>
+              <TableHead>Module</TableHead>
+              <TableHead className="text-right">Files</TableHead>
+              <TableHead className="text-right">LOC</TableHead>
+              <TableHead className="text-right">Avg cx</TableHead>
+              <TableHead className="text-right">Smells</TableHead>
+              <TableHead className="text-right" title="Fan-in: # modules importing this one">
+                In
+              </TableHead>
+              <TableHead className="text-right" title="Fan-out: # modules this one imports">
+                Out
+              </TableHead>
+              <TableHead
+                className="text-right"
+                title="Internal-edge / total-edge ratio. Higher = more self-contained."
+              >
+                Cohesion
+              </TableHead>
+              <TableHead
+                className="text-right"
+                title="Martin's I = fanOut / (fanIn + fanOut). 0 = stable provider, 1 = volatile consumer."
+              >
+                Instab
+              </TableHead>
+              {showDMain ? (
                 <TableHead
                   className="text-right"
                   title="|abstractness + instability − 1|. Far from 0 = zone of pain or uselessness."
                 >
                   D-main
                 </TableHead>
-                <TableHead className="text-right">Grade</TableHead>
-              </TableRow>
-            </TableHeader>
-            <TableBody>
-              {modules.length === 0 ? (
-                <TableRow>
-                  <TableCell colSpan={11} className="text-center text-muted-foreground">
-                    No modules detected.
+              ) : null}
+              <TableHead className="text-right">Grade</TableHead>
+            </TableRow>
+          </TableHeader>
+          <TableBody>
+            {primary.map((m) => {
+              const grade = scoreToGrade(Math.max(0, 100 - m.avgComplexity * 5 - m.smellCount * 2));
+              const shape = classifyModuleShape(m);
+              return (
+                <TableRow key={m.id} data-testid="module-row">
+                  <TableCell className="font-medium">
+                    <div className="flex items-center gap-2">
+                      <span>{m.name}</span>
+                      {shape ? (
+                        <span
+                          className={`rounded px-1.5 py-0.5 text-[10px] font-semibold uppercase tracking-wide ${shape.color}`}
+                          title={shape.description}
+                        >
+                          {shape.label}
+                        </span>
+                      ) : null}
+                    </div>
+                  </TableCell>
+                  <TableCell className="text-right">{m.fileCount}</TableCell>
+                  <TableCell className="text-right">{m.totalLoc}</TableCell>
+                  <TableCell className="text-right">{formatScore(m.avgComplexity)}</TableCell>
+                  <TableCell className="text-right">{m.smellCount}</TableCell>
+                  <TableCell className="text-right">{formatOptionalInt(m.fanIn)}</TableCell>
+                  <TableCell className="text-right">{formatOptionalInt(m.fanOut)}</TableCell>
+                  <TableCell className="text-right">{formatRatio(m.cohesionRatio)}</TableCell>
+                  <TableCell className="text-right">{formatRatio(m.instability)}</TableCell>
+                  {showDMain ? (
+                    <TableCell className="text-right">{formatRatio(m.martinDistance)}</TableCell>
+                  ) : null}
+                  <TableCell className="text-right">
+                    <div className="flex justify-end">
+                      <GradeBadge grade={grade} size="sm" />
+                    </div>
                   </TableCell>
                 </TableRow>
-              ) : (
-                modules.map((m) => {
-                  const grade = scoreToGrade(
-                    Math.max(0, 100 - m.avgComplexity * 5 - m.smellCount * 2)
-                  );
-                  return (
-                    <TableRow key={m.id} data-testid="module-row">
-                      <TableCell className="font-medium">{m.name}</TableCell>
-                      <TableCell className="text-right">{m.fileCount}</TableCell>
-                      <TableCell className="text-right">{m.totalLoc}</TableCell>
-                      <TableCell className="text-right">{formatScore(m.avgComplexity)}</TableCell>
-                      <TableCell className="text-right">{m.smellCount}</TableCell>
-                      <TableCell className="text-right">{formatOptionalInt(m.fanIn)}</TableCell>
-                      <TableCell className="text-right">{formatOptionalInt(m.fanOut)}</TableCell>
-                      <TableCell className="text-right">{formatRatio(m.cohesionRatio)}</TableCell>
-                      <TableCell className="text-right">{formatRatio(m.instability)}</TableCell>
-                      <TableCell className="text-right">{formatRatio(m.martinDistance)}</TableCell>
-                      <TableCell className="text-right">
-                        <div className="flex justify-end">
-                          <GradeBadge grade={grade} size="sm" />
-                        </div>
-                      </TableCell>
-                    </TableRow>
-                  );
-                })
-              )}
-            </TableBody>
-          </Table>
-        </Card>
-      </section>
+              );
+            })}
+          </TableBody>
+        </Table>
+      </Card>
+
+      {small.length > 0 ? (
+        <details className="rounded-lg border bg-muted/30 p-3 text-sm" data-testid="small-modules">
+          <summary className="cursor-pointer font-medium text-muted-foreground">
+            {small.length} smaller module{small.length === 1 ? '' : 's'} (single-file)
+          </summary>
+          <ul className="mt-3 grid grid-cols-1 gap-1 md:grid-cols-2">
+            {small.map((m) => (
+              <li
+                key={m.id}
+                className="flex items-center justify-between rounded px-2 py-1 text-xs"
+              >
+                <span className="font-medium">{m.name}</span>
+                <span className="text-muted-foreground">
+                  {m.totalLoc} LOC · {m.smellCount} smell{m.smellCount === 1 ? '' : 's'}
+                </span>
+              </li>
+            ))}
+          </ul>
+        </details>
+      ) : null}
     </div>
   );
 }

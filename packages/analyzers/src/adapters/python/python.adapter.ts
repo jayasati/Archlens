@@ -46,10 +46,20 @@ const DEFAULT_EXCLUDES = [
   'public',
   'assets',
   'resources',
+  'sample-projects',
 ];
 
 export class PythonAdapter implements Adapter {
   readonly language = 'python' as const;
+  readonly capabilities = {
+    complexity: true,
+    cohesion: true,
+    coupling: true,
+    smells: true,
+    // ABC.ABC / typing.Protocol detection requires inheritance lookup that
+    // the adapter doesn't currently do. Deferred.
+    abstractness: false,
+  } as const;
 
   async analyze(repoPath: string, config: AnalyzerConfig): Promise<Repo> {
     const absRepo = path.resolve(repoPath);
@@ -294,7 +304,11 @@ export class PythonAdapter implements Adapter {
     const cohesion = computeModuleCohesion(cohesionFileEdges, fileToModule, moduleSizes);
     for (const [mid, ratio] of cohesion.ratios) {
       const mod = modulesByName.get(mid);
-      if (mod) mod.cohesionRatio = ratio;
+      if (mod) {
+        mod.cohesionRatio = ratio;
+        // No sub-splitting on the Python side, so workspace cohesion equals inner.
+        mod.workspaceCohesionRatio = ratio;
+      }
     }
 
     const scores = computeScores(
@@ -325,6 +339,7 @@ export class PythonAdapter implements Adapter {
       languages: ['python'],
       modules,
       edges: aggregatedEdges,
+      cycles: cycles.length > 0 ? cycles : undefined,
       scoreBreakdown: scores,
       grade: scoreToGrade(scores.overall),
     };

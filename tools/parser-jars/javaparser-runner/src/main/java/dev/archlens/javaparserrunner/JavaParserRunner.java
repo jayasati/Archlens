@@ -73,6 +73,7 @@ public final class JavaParserRunner {
     SKIP_DIRS.add("public");
     SKIP_DIRS.add("assets");
     SKIP_DIRS.add("resources");
+    SKIP_DIRS.add("sample-projects");
   }
 
   public static void main(String[] args) throws Exception {

@@ -1,6 +1,7 @@
 import type { z } from 'zod';
 import type {
   ClassSchema,
+  CycleSchema,
   EdgeKindSchema,
   EdgeSchema,
   FileSchema,
@@ -28,5 +29,6 @@ export type ClassIR = z.infer<typeof ClassSchema>;
 export type FileIR = z.infer<typeof FileSchema>;
 export type Module = z.infer<typeof ModuleSchema>;
 export type Edge = z.infer<typeof EdgeSchema>;
+export type Cycle = z.infer<typeof CycleSchema>;
 export type ScoreBreakdown = z.infer<typeof ScoreBreakdownSchema>;
 export type Repo = z.infer<typeof RepoSchema>;

@@ -38,6 +38,12 @@ export class ReportsService {
       where: { reportId: report.id },
     });
     const topSmells = pickTopSmells(smellRows, 5);
+    // Resolve cycle node IDs to display names from the IR module list.
+    const moduleNameById = new Map(ir.modules.map((m) => [m.id, m.name]));
+    const cycles = ir.cycles?.map((c) => ({
+      moduleIds: c.nodes,
+      moduleNames: c.nodes.map((id) => moduleNameById.get(id) ?? id),
+    }));
     return {
       id: report.id,
       scanId: report.scanId,
@@ -53,6 +59,7 @@ export class ReportsService {
         smells: report.smellsCount,
       },
       topSmells,
+      cycles,
       generatedAt: report.generatedAt.toISOString(),
     };
   }

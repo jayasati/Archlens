@@ -16,6 +16,13 @@ export interface ReportCounts {
   smells: number;
 }
 
+export interface ReportCycleDto {
+  /** Module IDs in cycle order (e.g. ['mod_bot', 'mod_data', 'mod_bot']). */
+  moduleIds: string[];
+  /** Same nodes by display name, for UI rendering. */
+  moduleNames: string[];
+}
+
 export interface ReportSummaryDto {
   id: string;
   scanId: string;
@@ -25,6 +32,8 @@ export interface ReportSummaryDto {
   scoreBreakdown: ScoreBreakdown;
   counts: ReportCounts;
   topSmells: Smell[];
+  /** Detected dependency cycles in the module graph. Absent when none. */
+  cycles?: ReportCycleDto[];
   generatedAt: string;
   irBlobUrl?: string;
 }

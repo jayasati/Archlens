@@ -49,6 +49,7 @@ const SKIP_DIRS = new Set([
   'public',
   'assets',
   'resources',
+  'sample-projects',
 ]);
 
 export interface OrchestratorConfig extends AnalyzerConfig {
@@ -231,9 +232,13 @@ export function mergeIRs(
     for (const lang of ir.languages) languages.add(lang);
     for (const mod of ir.modules) {
       modules.push(mod);
-      if (mod.cohesionRatio !== undefined) {
+      // Prefer the workspace-grouped cohesion when the adapter computed it
+      // (sibling submodules of the same workspace count as internal). For
+      // adapters that didn't sub-split, the two values are identical.
+      const cohesionForScoring = mod.workspaceCohesionRatio ?? mod.cohesionRatio;
+      if (cohesionForScoring !== undefined) {
         const modLoc = mod.files.reduce((sum, f) => sum + f.loc, 0);
-        cohesionWeighted += mod.cohesionRatio * modLoc;
+        cohesionWeighted += cohesionForScoring * modLoc;
         moduleLocSum += modLoc;
       }
       for (const file of mod.files) {
@@ -317,6 +322,7 @@ export function mergeIRs(
     languages: Array.from(languages).sort() as Language[],
     modules: modules.sort((a, b) => a.id.localeCompare(b.id)),
     edges,
+    cycles: cycles.length > 0 ? cycles : undefined,
     scoreBreakdown: scores,
     grade: scoreToGrade(scores.overall),
   };

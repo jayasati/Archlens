@@ -12,11 +12,12 @@ console.log('LANGUAGES:', ir.languages);
 console.log('GRADE    :', grade);
 console.log();
 console.log('Score breakdown:');
-console.log('  complexity  :', sb.complexity);
-console.log('  duplication :', sb.duplication);
-console.log('  coupling    :', sb.coupling);
-console.log('  cohesion    :', sb.cohesion);
-console.log('  smells      :', sb.smells);
+const notes = sb.measurementNotes ?? {};
+const dimensions = ['complexity', 'duplication', 'coupling', 'cohesion', 'smells'];
+for (const dim of dimensions) {
+  const note = notes[dim] ? `   (${notes[dim]})` : '';
+  console.log('  ' + dim.padEnd(12) + ':', String(sb[dim]).padStart(6) + note);
+}
 console.log('  overall     :', sb.overall);
 console.log();
 
