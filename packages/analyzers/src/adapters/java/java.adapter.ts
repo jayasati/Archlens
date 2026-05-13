@@ -20,7 +20,6 @@ import {
   enrichModuleCoupling,
   type ModuleTypeCounts,
 } from '../../metrics/coupling.js';
-import { computeModuleCohesion, type FileEdge } from '../../metrics/cohesion.js';
 import { computeScores } from '../../scoring/engine.js';
 import { stampModuleScores } from '../../scoring/module-scores.js';
 import { mergeThresholds, mergeWeights } from '../../scoring/weights.default.js';
@@ -101,20 +100,8 @@ function transformRunnerOutput(
   const moduleSpringInfo = new Map<string, SpringClassInfo[]>();
   const allSmells: Smell[] = [];
   const fileEdges: Edge[] = [];
-  const cohesionFileEdges: FileEdge[] = [];
-  const fileToModule = new Map<string, string>();
   const moduleSizes = new Map<string, { loc: number; fileCount: number }>();
   const moduleTypeCounts = new Map<string, ModuleTypeCounts>();
-  // Java imports are by FQN (package.Type) — build a map from importable package
-  // to a representative file path so cohesion can detect when an import lands
-  // inside the same module. We pick any one file per package; module assignment
-  // is by package anyway.
-  const packageToFile = new Map<string, string>();
-  for (const file of runner.files) {
-    if (file.packageName && !packageToFile.has(file.packageName)) {
-      packageToFile.set(file.packageName, file.relPath);
-    }
-  }
   let totalLoc = 0;
   let totalFunctions = 0;
   let totalClasses = 0;
@@ -145,7 +132,6 @@ function transformRunnerOutput(
     const moduleName = moduleNameForPackage(file.packageName, file.relPath);
     const moduleId = `mod_${sanitize(moduleName)}`;
 
-    fileToModule.set(file.relPath, moduleId);
     const existingSize = moduleSizes.get(moduleId) ?? { loc: 0, fileCount: 0 };
     moduleSizes.set(moduleId, {
       loc: existingSize.loc + file.loc,
@@ -276,14 +262,13 @@ function transformRunnerOutput(
         tags: [],
       });
 
-    // Build file-level edges for cohesion + module-level edges for coupling.
+    // Module-level edges for coupling. (Cohesion is unmeasured for Java —
+    // see the capability flag on JavaAdapter and the comment below.)
     for (const imp of file.imports) {
       const targetPackage = packageOfImport(imp.name);
       if (!targetPackage) continue;
       if (targetPackage.startsWith('java.') || targetPackage.startsWith('javax.')) continue;
       if (targetPackage.startsWith('org.springframework')) continue;
-      const targetFile = packageToFile.get(targetPackage);
-      if (targetFile) cohesionFileEdges.push({ fromFile: file.relPath, toFile: targetFile });
       const targetModuleName = moduleNameForPackage(targetPackage, '');
       const targetModuleId = `mod_${sanitize(targetModuleName)}`;
       if (targetModuleId === moduleId) continue;
@@ -318,14 +303,15 @@ function transformRunnerOutput(
     0
   );
 
-  const cohesion = computeModuleCohesion(cohesionFileEdges, fileToModule, moduleSizes);
-  for (const [mid, ratio] of cohesion.ratios) {
-    const mod = modulesByName.get(mid);
-    if (mod) {
-      mod.cohesionRatio = ratio;
-      mod.workspaceCohesionRatio = ratio;
-    }
-  }
+  // Cohesion is NOT measured for Java — see capability flag on JavaAdapter.
+  // Same-package references in Java need no `import` statement, so the
+  // import-based edge graph systemically misses internal edges and produces
+  // a 0% reading on any package whose classes only talk to siblings (the
+  // common Spring-service shape). Stamping that value would punish well-
+  // organised codebases for the adapter's limitation. cohesionRatio is left
+  // undefined on every module, and cohesionWeighted/moduleLocSum are not
+  // passed to computeScores — the scoring engine then attaches its
+  // "limited signal" note and excludes cohesion from the weighted overall.
 
   stampModuleScores(modules, allSmells, cycles, thresholds.longMethodComplexity);
 
@@ -342,8 +328,8 @@ function transformRunnerOutput(
       dualHubMax: couplingSummary.dualHubMax,
       hotSpotCount,
       hotSpotExcess,
-      cohesionWeighted: cohesion.cohesionWeighted,
-      moduleLocSum: cohesion.moduleLocSum,
+      // cohesionWeighted / moduleLocSum intentionally omitted — see the
+      // "Cohesion is NOT measured for Java" comment above.
       martinPainSum,
       smells: allSmells,
     },

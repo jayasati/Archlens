@@ -129,6 +129,31 @@ describe('JavaAdapter integration (spring-petclinic-mini fixture)', () => {
     expect(smellKinds).toContain('spring-layer-skip');
   });
 
+  // Regression: the Java adapter previously stamped a cohesionRatio on every
+  // module and fed cohesionWeighted to the scorer despite declaring
+  // capabilities.cohesion = false. Same-package refs need no `import`, so
+  // any package whose classes only talked to siblings (every Spring service
+  // package) was getting a false 0% reading that tanked the overall score
+  // (Wandr-master dropped from B to E for this reason). Cohesion must now
+  // stay unset on Java modules, and the scoring engine must mark the
+  // dimension as "limited signal" and exclude it from the weighted overall.
+  it.skipIf(!javaAvailable)('does not stamp cohesion on Java modules', async () => {
+    const ir = await new JavaAdapter().analyze(fixtureDir, {});
+    for (const mod of ir.modules) {
+      expect(mod.cohesionRatio).toBeUndefined();
+      expect(mod.workspaceCohesionRatio).toBeUndefined();
+    }
+    expect(ir.scoreBreakdown.measurementNotes?.cohesion).toBeDefined();
+  });
+
+  it.skipIf(!javaAvailable)('matches the cohesion capability flag it advertises', async () => {
+    const adapter = new JavaAdapter();
+    expect(adapter.capabilities.cohesion).toBe(false);
+    const ir = await adapter.analyze(fixtureDir, {});
+    const stamped = ir.modules.some((m) => m.cohesionRatio !== undefined);
+    expect(stamped).toBe(false);
+  });
+
   it('reports java availability cleanly when missing', async () => {
     // Smoke-test the probe path itself — even on machines without java, it should
     // throw a typed error rather than hang.
