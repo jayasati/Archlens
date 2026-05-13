@@ -20,6 +20,7 @@ import { ReportsModule } from './modules/reports/reports.module';
 import { ArchitectureModule } from './modules/architecture/architecture.module';
 import { HotspotsModule } from './modules/hotspots/hotspots.module';
 import { SmellsModule } from './modules/smells/smells.module';
+import { MetricsModule } from './modules/metrics/metrics.module';
 import { HealthModule } from './modules/health/health.module';
 
 @Module({
@@ -40,6 +41,7 @@ import { HealthModule } from './modules/health/health.module';
     ArchitectureModule,
     HotspotsModule,
     SmellsModule,
+    MetricsModule,
     HealthModule,
   ],
   providers: [

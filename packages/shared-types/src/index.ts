@@ -13,3 +13,4 @@ export * from './domain/score.js';
 export * from './domain/module.js';
 export * from './domain/smell.js';
 export * from './domain/smell-catalog.js';
+export * from './domain/metric-catalog.js';

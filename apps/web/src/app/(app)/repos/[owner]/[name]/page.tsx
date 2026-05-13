@@ -1,6 +1,12 @@
 import { Suspense } from 'react';
 import { notFound, redirect } from 'next/navigation';
-import type { ReportModuleScoreDto, ReportSummaryDto, ScanDto } from '@archlens/shared-types';
+import type {
+  MetricDefinitionDto,
+  MetricId,
+  ReportModuleScoreDto,
+  ReportSummaryDto,
+  ScanDto,
+} from '@archlens/shared-types';
 import { ApiError } from '@/lib/api/client';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import {
@@ -13,11 +19,13 @@ import {
 } from '@/components/ui/table';
 import { ScoreCard } from '@/components/score/score-card';
 import { RatingTile } from '@/components/score/rating-tile';
+import { RatingTileExpandable } from '@/components/metrics/rating-tile-expandable';
 import { ScoreTrendServer, ScoreTrendSkeleton } from '@/components/score/score-trend-server';
 import { GradeBadge } from '@/components/score/grade-badge';
 import { getSessionToken } from '@/lib/auth/server';
 import { loadRepoContext } from '@/lib/api/repo-loader';
 import { getReportSummaryServer, listReportModulesServer } from '@/lib/api/reports';
+import { getMetricCatalogServer } from '@/lib/api/metric-catalog';
 import { RescanButton } from '@/components/scan/rescan-button';
 import { scoreToGrade } from '@/lib/utils/grade';
 import { formatScore, formatRatio, formatOptionalInt } from '@/lib/utils/format';
@@ -36,6 +44,7 @@ interface RepoOverviewData {
   modules: ReportModuleScoreDto[];
   completedScans: ScanDto[];
   latestScan: ScanDto | null;
+  metricCatalog: MetricDefinitionDto[];
 }
 
 async function loadRepoOverview(
@@ -60,14 +69,18 @@ async function loadRepoOverview(
       modules: [],
       completedScans: [],
       latestScan,
+      metricCatalog: [],
     };
   }
 
   // Trend is fetched lazily inside <ScoreTrendServer> wrapped in Suspense,
   // so score card + ratings + modules paint without waiting on it.
-  const [summary, modules] = await Promise.all([
+  // The metric catalog is a public, cacheable endpoint — fail soft if it's
+  // unreachable so we never block a report from rendering.
+  const [summary, modules, metricCatalog] = await Promise.all([
     getReportSummaryServer(token, latestCompleted.id),
     listReportModulesServer(token, latestCompleted.id),
+    getMetricCatalogServer().catch(() => [] as MetricDefinitionDto[]),
   ]);
 
   return {
@@ -78,6 +91,7 @@ async function loadRepoOverview(
     modules,
     completedScans: completed,
     latestScan,
+    metricCatalog,
   };
 }
 
@@ -94,7 +108,16 @@ export default async function RepoOverviewPage({ params }: PageProps) {
   }
   if (data === 'not-found') notFound();
 
-  const { token: serverToken, repoId, scanId, summary, modules, completedScans, latestScan } = data;
+  const {
+    token: serverToken,
+    repoId,
+    scanId,
+    summary,
+    modules,
+    completedScans,
+    latestScan,
+    metricCatalog,
+  } = data;
 
   if (!summary) {
     return (
@@ -121,6 +144,8 @@ export default async function RepoOverviewPage({ params }: PageProps) {
   }
 
   const sb = summary.scoreBreakdown;
+  const metricBy = new Map<MetricId, MetricDefinitionDto>();
+  for (const m of metricCatalog) metricBy.set(m.metricId, m);
 
   return (
     <div className="space-y-6" data-testid="repo-overview">
@@ -138,30 +163,46 @@ export default async function RepoOverviewPage({ params }: PageProps) {
         <h2 className="mb-3 text-sm font-semibold uppercase tracking-wide text-muted-foreground">
           Ratings
         </h2>
-        <div className="grid grid-cols-2 gap-4 md:grid-cols-5">
-          <RatingTile
+        <div className="grid grid-cols-2 items-start gap-4 md:grid-cols-5">
+          <RatingTileExpandable
+            metricId="complexity"
             label="Complexity"
             score={sb.complexity}
             note={sb.measurementNotes?.complexity}
             derivation={sb.derivation?.complexity}
+            metric={metricBy.get('complexity')}
+            modules={modules}
+            topSmells={summary.topSmells}
           />
-          <RatingTile
+          <RatingTileExpandable
+            metricId="duplication"
             label="Duplication"
             score={sb.duplication}
             note={sb.measurementNotes?.duplication}
             derivation={sb.derivation?.duplication}
+            metric={metricBy.get('duplication')}
+            modules={modules}
+            topSmells={summary.topSmells}
           />
-          <RatingTile
+          <RatingTileExpandable
+            metricId="coupling"
             label="Coupling"
             score={sb.coupling}
             note={sb.measurementNotes?.coupling}
             derivation={sb.derivation?.coupling}
+            metric={metricBy.get('coupling')}
+            modules={modules}
+            topSmells={summary.topSmells}
           />
-          <RatingTile
+          <RatingTileExpandable
+            metricId="cohesion"
             label="Cohesion"
             score={sb.cohesion}
             note={sb.measurementNotes?.cohesion}
             derivation={sb.derivation?.cohesion}
+            metric={metricBy.get('cohesion')}
+            modules={modules}
+            topSmells={summary.topSmells}
           />
           <RatingTile
             label="Smells"
