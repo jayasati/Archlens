@@ -38,11 +38,21 @@ export class ReportsService {
       where: { reportId: report.id },
     });
     const topSmells = pickTopSmells(smellRows, 5);
-    // Resolve cycle node IDs to display names from the IR module list.
+    // Resolve cycle node IDs to display names from the IR module list. New IR
+    // emits edges + a representative path; older IR may only have `nodes`.
     const moduleNameById = new Map(ir.modules.map((m) => [m.id, m.name]));
+    const nameOf = (id: string): string => moduleNameById.get(id) ?? id;
     const cycles = ir.cycles?.map((c) => ({
       moduleIds: c.nodes,
-      moduleNames: c.nodes.map((id) => moduleNameById.get(id) ?? id),
+      moduleNames: c.nodes.map(nameOf),
+      edges: c.edges?.map((e) => ({
+        fromId: e.from,
+        toId: e.to,
+        fromName: nameOf(e.from),
+        toName: nameOf(e.to),
+      })),
+      representativePathIds: c.representativePath,
+      representativePathNames: c.representativePath?.map(nameOf),
     }));
     return {
       id: report.id,

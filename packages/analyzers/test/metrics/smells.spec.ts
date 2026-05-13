@@ -384,12 +384,40 @@ describe('cyclic-dependencies detector', () => {
       ['mod_b', 'b'],
     ]);
     const out = detectCyclicDependencies({
-      cycles: [{ nodes: ['mod_a', 'mod_b'] }],
+      cycles: [
+        {
+          nodes: ['mod_a', 'mod_b'],
+          edges: [
+            { from: 'mod_a', to: 'mod_b' },
+            { from: 'mod_b', to: 'mod_a' },
+          ],
+          representativePath: ['mod_a', 'mod_b', 'mod_a'],
+        },
+      ],
       moduleAnchors: anchors,
       moduleNames: names,
     });
     expect(out).toHaveLength(1);
     expect(out[0]!.message).toMatch(/a → b → a/);
+  });
+
+  it('falls back gracefully when representativePath is missing (legacy IR)', () => {
+    const out = detectCyclicDependencies({
+      cycles: [{ nodes: ['mod_a', 'mod_b'] }],
+      moduleAnchors: new Map([
+        ['mod_a', 'a/x.py'],
+        ['mod_b', 'b/y.py'],
+      ]),
+      moduleNames: new Map([
+        ['mod_a', 'a'],
+        ['mod_b', 'b'],
+      ]),
+    });
+    expect(out).toHaveLength(1);
+    // Backwards-compat fallback does NOT pretend the SCC is a linear chain.
+    expect(out[0]!.message).not.toMatch(/→/);
+    expect(out[0]!.message).toMatch(/a/);
+    expect(out[0]!.message).toMatch(/b/);
   });
 });
 

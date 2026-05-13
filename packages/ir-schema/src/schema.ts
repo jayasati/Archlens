@@ -150,11 +150,26 @@ export const ScoreBreakdownSchema = z.object({
 
 /**
  * A dependency cycle in the module graph — a strongly-connected component
- * of size > 1, or a self-loop. Nodes are module IDs in the order returned
- * by the SCC algorithm. UI renders these as "A → B → C → A".
+ * of size > 1, or a self-loop.
+ *
+ * - `nodes` is the unordered set of SCC members.
+ * - `edges` enumerates every real directed edge among those members so the UI
+ *   can prove the cycle without inventing arrows.
+ * - `representativePath` is a concrete shortest simple cycle through real
+ *   edges, with the first node repeated at the end (e.g. `['a', 'b', 'a']`).
+ *
+ * `edges` and `representativePath` are optional only so the schema stays
+ * backwards-compatible with reports stored before they were introduced — new
+ * runs always emit them.
  */
+export const CycleEdgeSchema = z.object({
+  from: z.string().min(1),
+  to: z.string().min(1),
+});
 export const CycleSchema = z.object({
   nodes: z.array(z.string().min(1)).min(1),
+  edges: z.array(CycleEdgeSchema).optional(),
+  representativePath: z.array(z.string().min(1)).min(2).optional(),
 });
 
 export const RepoSchema = z.object({

@@ -16,11 +16,34 @@ export interface ReportCounts {
   smells: number;
 }
 
+export interface ReportCycleEdgeDto {
+  /** Source module ID of a real directed edge inside the SCC. */
+  fromId: string;
+  /** Target module ID of the edge. */
+  toId: string;
+  /** Display name of the source module. */
+  fromName: string;
+  /** Display name of the target module. */
+  toName: string;
+}
+
 export interface ReportCycleDto {
-  /** Module IDs in cycle order (e.g. ['mod_bot', 'mod_data', 'mod_bot']). */
+  /** All modules in the SCC by ID. Order is the SCC algorithm's pop order. */
   moduleIds: string[];
-  /** Same nodes by display name, for UI rendering. */
+  /** Same set by display name (parallel to moduleIds). */
   moduleNames: string[];
+  /**
+   * Every real directed edge among the SCC members. Always present on reports
+   * generated after the cycle representation rework; older reports may omit it.
+   */
+  edges?: ReportCycleEdgeDto[];
+  /**
+   * Concrete shortest cycle through real edges, by module ID. First and last
+   * entries are equal so the loop closes (e.g. ['mod_bot', 'mod_data', 'mod_bot']).
+   */
+  representativePathIds?: string[];
+  /** Same path by display name (parallel to representativePathIds). */
+  representativePathNames?: string[];
 }
 
 export interface ReportSummaryDto {

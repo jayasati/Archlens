@@ -40,7 +40,15 @@ export function resolveImport(
   let target = imp.module;
   if (imp.isRelative) {
     const fromDotted = pathToDotted(fromFileRel);
-    const fromParts = fromDotted.split('.');
+    const fromPartsRaw = fromDotted ? fromDotted.split('.') : [];
+    // `pathToDotted` collapses `pkg/__init__.py` → `'pkg'` because in Python
+    // the __init__ file represents the package itself. For relative imports
+    // however, the file IS the package, so `from .X` in `pkg/__init__.py`
+    // resolves to `pkg.X`, not to a sibling of `pkg`. Compensate by treating
+    // an __init__.py source as if it were one path component deeper before
+    // applying the level-based strip.
+    const isInit = /[/\\]__init__\.py$/i.test(fromFileRel);
+    const fromParts = isInit ? [...fromPartsRaw, '__init__'] : fromPartsRaw;
     const stripCount = imp.level;
     const baseParts = fromParts.slice(0, Math.max(0, fromParts.length - stripCount));
     target = imp.module ? [...baseParts, imp.module].join('.') : baseParts.join('.');

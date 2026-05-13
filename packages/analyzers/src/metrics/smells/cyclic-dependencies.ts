@@ -20,8 +20,13 @@ export function detectCyclicDependencies(input: CyclicDependenciesInput): Smell[
     const first = cycle.nodes[0]!;
     const anchor = input.moduleAnchors.get(first) ?? '';
     if (!anchor) continue;
-    const names = cycle.nodes.map((id) => input.moduleNames.get(id) ?? id);
-    const display = names.join(' → ') + ` → ${names[0]}`;
+    const nameOf = (id: string): string => input.moduleNames.get(id) ?? id;
+    // Use the concrete shortest cycle (`representativePath`) when available
+    // so the message reflects real edges, not arbitrary SCC ordering. The
+    // path is closed (last === first), so no extra wrap-around needed.
+    const display = cycle.representativePath
+      ? cycle.representativePath.map(nameOf).join(' → ')
+      : `${cycle.nodes.map(nameOf).join(', ')} (cyclic)`;
     out.push({
       id: `smell_cycle_${++counter}`,
       kind: RULE.kind,

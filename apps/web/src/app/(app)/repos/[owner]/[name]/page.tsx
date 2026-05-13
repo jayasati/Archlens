@@ -3,6 +3,7 @@ import { notFound, redirect } from 'next/navigation';
 import type {
   MetricDefinitionDto,
   MetricId,
+  ReportCycleDto,
   ReportModuleScoreDto,
   ReportSummaryDto,
   ScanDto,
@@ -235,14 +236,9 @@ export default async function RepoOverviewPage({ params }: PageProps) {
               {summary.cycles.length === 1 ? '' : ' chains'} detected. Each cycle penalises the
               coupling score by 15 points.
             </div>
-            <ul className="space-y-2 font-mono text-sm">
+            <ul className="space-y-3 text-sm">
               {summary.cycles.map((c, i) => (
-                <li key={i} className="flex items-center gap-2">
-                  <span className="rounded bg-red-100 px-2 py-0.5 text-xs font-semibold text-red-700 dark:bg-red-950 dark:text-red-300">
-                    cycle {i + 1}
-                  </span>
-                  <span>{[...c.moduleNames, c.moduleNames[0]].join(' → ')}</span>
-                </li>
+                <CycleEntry key={i} index={i} cycle={c} />
               ))}
             </ul>
           </Card>
@@ -380,5 +376,68 @@ function ModulesTable({ modules }: { modules: ReportModuleScoreDto[] }) {
         </details>
       ) : null}
     </div>
+  );
+}
+
+function CycleEntry({ index, cycle }: { index: number; cycle: ReportCycleDto }) {
+  // Prefer the real shortest path; fall back to the SCC nodes for old reports
+  // that predate the representativePath enrichment. Either way, never join
+  // arbitrary node lists with " → " — that's the bug this is meant to fix.
+  const pathNames = cycle.representativePathNames;
+  const edges = cycle.edges ?? [];
+  const sccSize = cycle.moduleNames.length;
+  const showMembers = sccSize > 2 && pathNames && pathNames.length - 1 < sccSize;
+  const pathEdgeKey = (from: string, to: string) => `${from} ${to}`;
+  const pathEdgeKeys = new Set<string>();
+  if (pathNames) {
+    for (let i = 0; i < pathNames.length - 1; i++) {
+      pathEdgeKeys.add(pathEdgeKey(pathNames[i]!, pathNames[i + 1]!));
+    }
+  }
+  const supportingEdges = edges
+    .map((e) => ({ ...e, key: pathEdgeKey(e.fromName, e.toName) }))
+    .filter((e) => !pathEdgeKeys.has(e.key));
+  return (
+    <li
+      className="rounded border bg-background p-3"
+      data-testid="dependency-cycle"
+      data-cycle-index={index}
+    >
+      <div className="flex flex-wrap items-center gap-2">
+        <span className="rounded bg-red-100 px-2 py-0.5 text-xs font-semibold text-red-700 dark:bg-red-950 dark:text-red-300">
+          cycle {index + 1}
+        </span>
+        {pathNames ? (
+          <span className="font-mono text-sm" data-testid="cycle-path">
+            {pathNames.join(' → ')}
+          </span>
+        ) : (
+          <span className="font-mono text-sm text-muted-foreground">
+            {cycle.moduleNames.join(', ')}
+          </span>
+        )}
+      </div>
+      {showMembers ? (
+        <p className="mt-2 text-xs text-muted-foreground">
+          Part of a larger {sccSize}-module strongly-connected component:{' '}
+          <span className="font-mono">{cycle.moduleNames.join(', ')}</span>
+        </p>
+      ) : null}
+      {supportingEdges.length > 0 ? (
+        <details className="mt-2 text-xs" data-testid="cycle-edges">
+          <summary className="cursor-pointer text-muted-foreground">
+            {supportingEdges.length} additional edge{supportingEdges.length === 1 ? '' : 's'}{' '}
+            connecting these modules
+          </summary>
+          <ul className="mt-1 grid grid-cols-1 gap-0.5 font-mono sm:grid-cols-2">
+            {supportingEdges.map((e) => (
+              <li key={e.key}>
+                {e.fromName} → {e.toName}
+              </li>
+            ))}
+          </ul>
+        </details>
+      ) : null}
+    </li>
   );
 }
