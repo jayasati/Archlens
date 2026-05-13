@@ -46,7 +46,13 @@ import { buildModuleGraph } from '../../graph/graph-builder.js';
 import { detectCycles } from '../../graph/cycle-detector.js';
 import type { Adapter, AnalyzerConfig } from '../adapter.interface.js';
 import { parsePythonSource, type ParsedFile } from './ast-walker.js';
-import { buildModuleIndex, pathToDotted, resolveImport, topPackage } from './import-resolver.js';
+import {
+  buildModuleIndex,
+  detectWrapperPackage,
+  moduleFor,
+  pathToDotted,
+  resolveImport,
+} from './import-resolver.js';
 
 const DEFAULT_EXCLUDES = [
   '__pycache__',
@@ -98,6 +104,10 @@ export class PythonAdapter implements Adapter {
     const moduleIndex = buildModuleIndex(relPaths);
     const dottedToFile = new Map<string, string>();
     for (const [relPath, dotted] of moduleIndex.byPath) dottedToFile.set(dotted, relPath);
+    // Peel a single top-level wrapper (`app/`, `src/`, project name…) so
+    // its subpackages become distinct modules instead of all collapsing
+    // into one bucket. See detectWrapperPackage for the heuristic.
+    const wrapper = detectWrapperPackage(relPaths);
 
     const parsedFiles: ParsedFile[] = [];
     for (const file of files) {
@@ -122,7 +132,7 @@ export class PythonAdapter implements Adapter {
     for (const parsed of parsedFiles) {
       const fileSmells: Smell[] = [];
       const dotted = pathToDotted(parsed.relPath);
-      const moduleName = topPackage(dotted);
+      const moduleName = moduleFor(dotted, wrapper);
       const moduleId = `mod_${moduleName}`;
 
       fileToModule.set(parsed.relPath, moduleId);
@@ -447,7 +457,7 @@ export class PythonAdapter implements Adapter {
         if (!targetDotted) continue;
         const targetFile = dottedToFile.get(targetDotted);
         if (targetFile) cohesionFileEdges.push({ fromFile: parsed.relPath, toFile: targetFile });
-        const targetModule = `mod_${topPackage(targetDotted)}`;
+        const targetModule = `mod_${moduleFor(targetDotted, wrapper)}`;
         if (targetModule === moduleId) continue;
         fileEdges.push({
           from: moduleId,

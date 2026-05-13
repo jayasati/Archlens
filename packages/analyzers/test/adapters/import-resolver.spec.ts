@@ -1,6 +1,8 @@
 import { describe, expect, it } from 'vitest';
 import {
   buildModuleIndex,
+  detectWrapperPackage,
+  moduleFor,
   pathToDotted,
   resolveImport,
 } from '../../src/adapters/python/import-resolver.js';
@@ -84,5 +86,65 @@ describe('resolveImport', () => {
       INDEX
     );
     expect(target).toBe('pkg.costs');
+  });
+});
+
+describe('detectWrapperPackage', () => {
+  it('returns null when multiple top-level packages exist', () => {
+    expect(
+      detectWrapperPackage(['main.py', 'models/user.py', 'routers/users.py', 'services/auth.py'])
+    ).toBeNull();
+  });
+
+  it('detects a single top-level wrapper around multiple sub-packages', () => {
+    expect(
+      detectWrapperPackage([
+        'app/__init__.py',
+        'app/main.py',
+        'app/api/endpoints.py',
+        'app/core/config.py',
+        'app/services/summarizer.py',
+      ])
+    ).toBe('app');
+  });
+
+  it('peels through nested wrappers (src/myapp/...)', () => {
+    expect(
+      detectWrapperPackage([
+        'src/myapp/api/endpoints.py',
+        'src/myapp/core/config.py',
+        'src/myapp/services/auth.py',
+      ])
+    ).toBe('src.myapp');
+  });
+
+  it('does not peel when the wrapper has only one sub-package', () => {
+    expect(detectWrapperPackage(['app/api/endpoints.py', 'app/api/schemas.py'])).toBeNull();
+  });
+
+  it('returns null on an empty file list', () => {
+    expect(detectWrapperPackage([])).toBeNull();
+  });
+});
+
+describe('moduleFor', () => {
+  it('falls back to topPackage when no wrapper is set', () => {
+    expect(moduleFor('routers.users', null)).toBe('routers');
+    expect(moduleFor('main', null)).toBe('main');
+  });
+
+  it('peels the wrapper segment when present', () => {
+    expect(moduleFor('app.api.endpoints', 'app')).toBe('api');
+    expect(moduleFor('app.main', 'app')).toBe('main');
+  });
+
+  it('buckets the wrappers own __init__.py under the wrapper leaf', () => {
+    // dotted("app/__init__.py") === "app"
+    expect(moduleFor('app', 'app')).toBe('app');
+    expect(moduleFor('src.myapp', 'src.myapp')).toBe('myapp');
+  });
+
+  it('peels nested wrappers', () => {
+    expect(moduleFor('src.myapp.api.endpoints', 'src.myapp')).toBe('api');
   });
 });

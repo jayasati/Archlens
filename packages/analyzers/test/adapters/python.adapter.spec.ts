@@ -6,6 +6,7 @@ import { PythonAdapter } from '../../src/adapters/python/python.adapter.js';
 
 const here = path.dirname(fileURLToPath(import.meta.url));
 const fixtureDir = path.resolve(here, '../fixtures/python-fastapi-sample');
+const singleWrapperFixture = path.resolve(here, '../fixtures/python-single-wrapper-sample');
 
 describe('PythonAdapter integration', () => {
   it('produces a valid IR for the FastAPI fixture', async () => {
@@ -71,5 +72,43 @@ describe('PythonAdapter integration', () => {
     // The fixture has clear smells; overall should not be perfect.
     expect(ir.scoreBreakdown.overall).toBeLessThan(100);
     expect(['A', 'B', 'C', 'D', 'E']).toContain(ir.grade);
+  });
+});
+
+describe('PythonAdapter single-wrapper peeling', () => {
+  // Regression: projects with everything nested under `app/` previously
+  // collapsed into a single `mod_app` module. The adapter should peel the
+  // wrapper so api/core/services/utils show up as distinct modules.
+  it('detects subpackages of a single top-level wrapper as separate modules', async () => {
+    const adapter = new PythonAdapter();
+    const ir = await adapter.analyze(singleWrapperFixture, {});
+    const moduleNames = new Set(ir.modules.map((m) => m.name));
+
+    expect(moduleNames.has('api')).toBe(true);
+    expect(moduleNames.has('core')).toBe(true);
+    expect(moduleNames.has('services')).toBe(true);
+    expect(moduleNames.has('utils')).toBe(true);
+    // app/main.py is a loose top-level file, gets its own module.
+    expect(moduleNames.has('main')).toBe(true);
+    // The wrapper itself (`app/__init__.py`) is still represented.
+    expect(moduleNames.has('app')).toBe(true);
+
+    // Sanity: should be more than the old single-bucket behavior.
+    expect(ir.modules.length).toBeGreaterThanOrEqual(5);
+  });
+
+  it('builds cross-subpackage edges within the wrapper', async () => {
+    const adapter = new PythonAdapter();
+    const ir = await adapter.analyze(singleWrapperFixture, {});
+    const pairs = new Set(ir.edges.map((e) => `${e.from}->${e.to}`));
+
+    // api/endpoints.py imports services + utils
+    expect(pairs.has('mod_api->mod_services')).toBe(true);
+    expect(pairs.has('mod_api->mod_utils')).toBe(true);
+    // services/summarizer.py imports core
+    expect(pairs.has('mod_services->mod_core')).toBe(true);
+    // main.py imports api + core
+    expect(pairs.has('mod_main->mod_api')).toBe(true);
+    expect(pairs.has('mod_main->mod_core')).toBe(true);
   });
 });

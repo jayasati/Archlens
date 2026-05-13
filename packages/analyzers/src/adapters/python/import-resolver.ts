@@ -72,6 +72,81 @@ export function topPackage(dotted: string): string {
   return parts[0]!;
 }
 
+/**
+ * When every source file lives under a single top-level package (e.g.
+ * `app/`, `src/`, the project name), that package is a wrapper around the
+ * real modules — `app/api/`, `app/services/`, etc. Treating the wrapper as
+ * the module collapses everything into one bucket, hiding intra-app
+ * structure and starving coupling/cohesion analysis of cross-module edges.
+ *
+ * Iteratively peel wrapper segments while:
+ *   - every remaining file shares the same first segment, AND
+ *   - that segment contains at least two distinct sub-packages
+ *
+ * Returns the dotted wrapper prefix (e.g. `'app'`, `'src.myapp'`) or
+ * `null` when no peeling is warranted.
+ */
+export function detectWrapperPackage(relPaths: string[]): string | null {
+  const dotteds = relPaths.map(pathToDotted).filter((d) => d.length > 0);
+  if (dotteds.length === 0) return null;
+
+  const candidateParts: string[] = [];
+  let current = dotteds;
+
+  // Greedy peel: as long as every remaining path shares the same first
+  // segment, that segment is part of the wrapper. Safety bound — Python
+  // package nesting deeper than this is exotic.
+  for (let i = 0; i < 8; i++) {
+    const firstSegs = new Set<string>();
+    for (const d of current) firstSegs.add(d.split('.')[0]!);
+    if (firstSegs.size !== 1) break;
+    const candidate = firstSegs.values().next().value as string;
+    candidateParts.push(candidate);
+    current = current
+      .map((d) => {
+        const parts = d.split('.');
+        return parts.length >= 2 ? parts.slice(1).join('.') : '';
+      })
+      .filter((d) => d.length > 0);
+    if (current.length === 0) break;
+  }
+
+  if (candidateParts.length === 0) return null;
+
+  // Commit the peel only if it would actually reveal multiple modules AND
+  // at least one of them is a real sub-package (has further nesting).
+  // Otherwise the wrapper has only leaf .py siblings — peeling would
+  // produce per-file modules, which is rarely useful for flat layouts.
+  const remainingFirstSegs = new Set<string>();
+  let hasSubpackage = false;
+  for (const d of current) {
+    remainingFirstSegs.add(d.split('.')[0]!);
+    if (d.includes('.')) hasSubpackage = true;
+  }
+  if (remainingFirstSegs.size < 2 || !hasSubpackage) return null;
+
+  return candidateParts.join('.');
+}
+
+/**
+ * Pick the module name for a dotted file path, peeling the wrapper prefix
+ * first when one was detected. Falls back to {@link topPackage} for paths
+ * that don't sit under the wrapper.
+ */
+export function moduleFor(dotted: string, wrapper: string | null): string {
+  if (!dotted) return '_root';
+  if (wrapper && (dotted === wrapper || dotted.startsWith(wrapper + '.'))) {
+    if (dotted === wrapper) {
+      // The wrapper's own __init__.py — bucket it under the wrapper's leaf
+      // segment so the file is still represented.
+      return wrapper.split('.').pop()!;
+    }
+    const remaining = dotted.slice(wrapper.length + 1);
+    return remaining.split('.')[0]!;
+  }
+  return topPackage(dotted);
+}
+
 export function relativeFromRepo(repoPath: string, absPath: string): string {
   return path.relative(repoPath, absPath).split(path.sep).join('/');
 }
