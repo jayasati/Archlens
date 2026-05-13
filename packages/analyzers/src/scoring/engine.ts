@@ -188,10 +188,16 @@ function round(value: number): number {
 
 export interface ModuleScoreInput {
   totalLoc: number;
+  totalFunctions: number;
+  totalComplexity: number;
   hotSpotCount: number;
   hotSpotExcess: number;
   fanIn: number;
   fanOut: number;
+  /** Robert Martin's instability: fanOut / (fanIn + fanOut). Undefined when isolated. */
+  instability?: number;
+  /** |abstractness + instability − 1|. Undefined when abstractness is unknown. */
+  martinDistance?: number;
   cohesionRatio?: number;
   smells: Smell[];
   // True iff this module participates in any detected cycle. Cycles are not a
@@ -215,9 +221,23 @@ export function computeModuleScores(input: ModuleScoreInput): ScoreBreakdown {
   const derivation: Derivation = {};
 
   // ── Complexity ────────────────────────────────────────────────────────
+  // Two signals combined:
+  //  • Hot-spot density — Σ excess complexity over the threshold, normalised
+  //    per KLOC. Catches a few extreme outliers in a sea of simple code.
+  //  • Average complexity — penalises modules where every function is
+  //    moderately complex but none crosses the hot-spot threshold (the case
+  //    that previously left "complexity=100" looking fake).
   const hotSpotPerKloc = input.totalLoc > 0 ? (input.hotSpotExcess * 1000) / input.totalLoc : 0;
-  const complexityScore = clamp(100 - hotSpotPerKloc * 2);
-  derivation.complexity = `100 − hot-spot density × 2 = ${complexityScore.toFixed(0)} (${input.hotSpotCount} hot-spot function${input.hotSpotCount === 1 ? '' : 's'} over ${input.totalLoc.toLocaleString()} LOC)`;
+  const avgComplexity = input.totalFunctions > 0 ? input.totalComplexity / input.totalFunctions : 0;
+  const avgComplexityPenalty = Math.max(0, avgComplexity - 4) * 4;
+  const complexityScore = clamp(100 - hotSpotPerKloc * 2 - avgComplexityPenalty);
+  if (input.totalFunctions === 0) {
+    notes.complexity = 'limited signal — no functions detected';
+  }
+  derivation.complexity =
+    `100 − hot-spot density × 2 − avg-cx penalty = ${complexityScore.toFixed(0)} ` +
+    `(${input.hotSpotCount} hot-spot${input.hotSpotCount === 1 ? '' : 's'}, ` +
+    `avg cx ${avgComplexity.toFixed(1)} over ${input.totalFunctions} function${input.totalFunctions === 1 ? '' : 's'})`;
 
   // ── Duplication ───────────────────────────────────────────────────────
   // jscpd runs at the repo level, not per-module. Skip the dimension.
@@ -226,18 +246,43 @@ export function computeModuleScores(input: ModuleScoreInput): ScoreBreakdown {
   const duplicationScore = 100;
 
   // ── Coupling ──────────────────────────────────────────────────────────
-  // For a single module, "coupling" is its own fan-out + dual-hub-ness.
-  // Penalise heavy fan-out (depends on many) and dual-hub (both consumed and
-  // consumes heavily). Cycles add a fixed hit, same as the repo-level engine.
-  const fanOutPenalty = Math.max(0, input.fanOut - 3) * 5;
+  // For a single module, coupling is a blend of:
+  //  • fan-out density (depends on many other modules)
+  //  • fan-in pressure on a leaf (heavily depended-on, even with fanOut=0)
+  //  • dual-hub (both consumed and consumes heavily — god-module)
+  //  • Robert Martin instability / pain-zone distance
+  //  • cycle membership
+  // Old thresholds (fanOut > 3, fanIn*fanOut > 16) were so high that almost
+  // every real module landed at 100; these are tightened so the score
+  // actually moves on realistic module shapes.
+  const fanOutPenalty = Math.max(0, input.fanOut - 2) * 4;
+  const fanInHubPenalty = input.fanOut === 0 ? Math.max(0, input.fanIn - 4) * 3 : 0;
   const dualHub = input.fanIn * input.fanOut;
-  const dualHubPenalty = Math.max(0, dualHub - 16) * 1.5;
+  const dualHubPenalty = Math.max(0, dualHub - 6) * 2;
+  const instabPenalty =
+    input.instability !== undefined ? Math.max(0, input.instability - 0.7) * 40 : 0;
+  const painPenalty =
+    input.martinDistance !== undefined ? Math.max(0, input.martinDistance - 0.5) * 30 : 0;
   const cyclePenalty = input.inCycle ? 15 : 0;
-  const couplingScore = clamp(100 - fanOutPenalty - dualHubPenalty - cyclePenalty);
+  const couplingScore = clamp(
+    100 -
+      fanOutPenalty -
+      fanInHubPenalty -
+      dualHubPenalty -
+      instabPenalty -
+      painPenalty -
+      cyclePenalty
+  );
   if (input.fanIn === 0 && input.fanOut === 0) {
     notes.coupling = 'limited signal — isolated module';
   }
-  derivation.coupling = `100 − fan-out penalty − dual-hub penalty${input.inCycle ? ' − cycle penalty' : ''} = ${couplingScore.toFixed(0)} (in ${input.fanIn}, out ${input.fanOut}${input.inCycle ? ', in cycle' : ''})`;
+  derivation.coupling =
+    `100 − fanOut/fanIn-hub/dual-hub/instability/pain/cycle penalties = ${couplingScore.toFixed(0)} ` +
+    `(in ${input.fanIn}, out ${input.fanOut}` +
+    (input.instability !== undefined ? `, I=${input.instability.toFixed(2)}` : '') +
+    (input.martinDistance !== undefined ? `, D=${input.martinDistance.toFixed(2)}` : '') +
+    (input.inCycle ? ', in cycle' : '') +
+    ')';
 
   // ── Cohesion ──────────────────────────────────────────────────────────
   let cohesionScore: number;

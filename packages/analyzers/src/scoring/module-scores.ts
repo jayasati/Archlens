@@ -28,11 +28,15 @@ export function stampModuleScores(
     let modHotSpotCount = 0;
     let modHotSpotExcess = 0;
     let modLoc = 0;
+    let modFunctions = 0;
+    let modComplexity = 0;
     for (const file of mod.files) {
       modLoc += file.loc;
       const fileSmells = smellsByFile.get(file.path);
       if (fileSmells) modSmells.push(...fileSmells);
       for (const fn of file.functions) {
+        modFunctions += 1;
+        modComplexity += fn.complexity;
         if (fn.complexity > longMethodComplexity) {
           modHotSpotCount += 1;
           modHotSpotExcess += fn.complexity - longMethodComplexity;
@@ -40,6 +44,8 @@ export function stampModuleScores(
       }
       for (const cls of file.classes) {
         for (const m of cls.methods) {
+          modFunctions += 1;
+          modComplexity += m.complexity;
           if (m.complexity > longMethodComplexity) {
             modHotSpotCount += 1;
             modHotSpotExcess += m.complexity - longMethodComplexity;
@@ -49,10 +55,14 @@ export function stampModuleScores(
     }
     mod.scoreBreakdown = computeModuleScores({
       totalLoc: modLoc,
+      totalFunctions: modFunctions,
+      totalComplexity: modComplexity,
       hotSpotCount: modHotSpotCount,
       hotSpotExcess: modHotSpotExcess,
       fanIn: mod.fanIn ?? 0,
       fanOut: mod.fanOut ?? 0,
+      instability: mod.instability,
+      martinDistance: mod.martinDistance,
       cohesionRatio: mod.cohesionRatio,
       smells: modSmells,
       inCycle: modulesInCycle.has(mod.id),

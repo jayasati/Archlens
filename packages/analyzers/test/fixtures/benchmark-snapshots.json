@@ -1,5 +1,5 @@
 {
-  "generatedAt": "2026-05-12T20:29:07.969Z",
+  "generatedAt": "2026-05-13T17:10:01.098Z",
   "repos": {
     "internshipPortal": {
       "languages": ["javascript"],
@@ -30,7 +30,7 @@
         "minor": 8,
         "info": 0
       },
-      "elapsedSeconds": 1.6
+      "elapsedSeconds": 1.5
     },
     "stockTrading": {
       "languages": ["java"],
@@ -61,38 +61,38 @@
         "minor": 5,
         "info": 0
       },
-      "elapsedSeconds": 2
+      "elapsedSeconds": 1.8
     },
     "stockBot": {
       "languages": ["python"],
-      "grade": "C",
+      "grade": "D",
       "scoreBreakdown": {
-        "complexity": 81.61,
+        "complexity": 60.48,
         "duplication": 100,
-        "coupling": 67.17,
-        "cohesion": 74.31,
-        "smells": 58.07,
-        "overall": 74.95,
+        "coupling": 52.43,
+        "cohesion": 73.13,
+        "smells": 44.22,
+        "overall": 63.04,
         "derivation": {
-          "complexity": "100 − hot-spot density × 2 = 82 (21 hot-spot functions over 9,788 LOC)",
+          "complexity": "100 − hot-spot density × 2 = 60 (44 hot-spot functions over 13,968 LOC)",
           "duplication": "100 − duplicate-lines ratio × 100 = 100 (0.0% of lines duplicated)",
-          "coupling": "100 − avg-fanOut penalty − hub penalty − dual-hub penalty − cycle penalty = 67 (12 modules, avg fanOut 1.8, max 7, 1 cycle)",
-          "cohesion": "LOC-weighted average of per-module cohesion ratios × 100 = 74 (8,869 LOC across modules with signal)",
-          "smells": "100 − Σ severity-weighted rate per KLOC = 58 (0 critical, 33 major, 128 minor, 68 info across 9,788 LOC)"
+          "coupling": "100 − avg-fanOut penalty − hub penalty − dual-hub penalty − cycle penalty = 52 (14 modules, avg fanOut 1.9, max 8, 1 cycle)",
+          "cohesion": "LOC-weighted average of per-module cohesion ratios × 100 = 73 (13,771 LOC across modules with signal)",
+          "smells": "100 − Σ severity-weighted rate per KLOC = 44 (3 critical, 65 major, 190 minor, 97 info across 13,968 LOC)"
         }
       },
-      "moduleCount": 12,
-      "edgeCount": 22,
-      "totalLoc": 9788,
-      "totalFunctions": 373,
-      "totalClasses": 7,
+      "moduleCount": 14,
+      "edgeCount": 26,
+      "totalLoc": 13968,
+      "totalFunctions": 493,
+      "totalClasses": 9,
       "smellsBySeverity": {
-        "critical": 0,
-        "major": 33,
-        "minor": 128,
-        "info": 68
+        "critical": 3,
+        "major": 65,
+        "minor": 190,
+        "info": 97
       },
-      "elapsedSeconds": 0.7
+      "elapsedSeconds": 0.8
     }
   }
 }
