@@ -8,6 +8,7 @@ import type {
   MetricId,
   ReportModuleScoreDto,
   Smell,
+  SmellDefinitionDto,
 } from '@archlens/shared-types';
 import { Badge } from '@/components/ui/badge';
 import { Card } from '@/components/ui/card';
@@ -28,6 +29,8 @@ interface RatingTileExpandableProps {
   modules: ReportModuleScoreDto[];
   /** Top smells from the report — used to highlight relevant playbook steps. */
   topSmells: ReadonlyArray<Smell>;
+  /** Smell catalog — used to surface per-smell remediation strings. */
+  smellCatalog?: ReadonlyArray<SmellDefinitionDto>;
 }
 
 export function RatingTileExpandable({
@@ -39,6 +42,7 @@ export function RatingTileExpandable({
   metric,
   modules,
   topSmells,
+  smellCatalog,
 }: RatingTileExpandableProps) {
   const [open, setOpen] = useState(false);
   const grade = scoreToGrade(score);
@@ -81,6 +85,7 @@ export function RatingTileExpandable({
           metric={metric}
           modules={modules}
           topSmells={topSmells}
+          smellCatalog={smellCatalog}
         />
       ) : null}
     </Card>
@@ -95,6 +100,7 @@ interface ExplainerPanelProps {
   metric?: MetricDefinitionDto;
   modules: ReportModuleScoreDto[];
   topSmells: ReadonlyArray<Smell>;
+  smellCatalog?: ReadonlyArray<SmellDefinitionDto>;
 }
 
 function ExplainerPanel({
@@ -105,12 +111,18 @@ function ExplainerPanel({
   metric,
   modules,
   topSmells,
+  smellCatalog,
 }: ExplainerPanelProps) {
   const offenders = pickOffenders(metricId, modules).slice(0, 3);
   const gap = metric ? Math.max(0, metric.optimal.min - score) : 0;
   const presentRules = new Set(topSmells.map((s) => s.ruleId));
   const playbook = metric ? rankPlaybookSteps(metric.improvementPlaybook, presentRules) : [];
   const band = metric ? bandForScore(metric, score) : undefined;
+  // Concrete per-offender fixes pulled straight from this repo's report —
+  // matched to the current metric via metric.relatedSmells, severity-ranked,
+  // and joined to SMELL_CATALOG for the remediation copy.
+  const mitigations =
+    metric && smellCatalog ? pickMitigations(metric, topSmells, smellCatalog) : [];
 
   return (
     <div
@@ -173,10 +185,57 @@ function ExplainerPanel({
         </div>
       ) : null}
 
+      {mitigations.length > 0 ? (
+        <div className="mt-3" data-testid={`rating-tile-mitigations-${metricId}`}>
+          <h4 className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
+            Exact mitigations ({mitigations.length})
+          </h4>
+          <p className="mt-1 text-[11px] text-muted-foreground">
+            Specific offenders in this repo, ranked worst-first.
+          </p>
+          <ul className="mt-2 space-y-2">
+            {mitigations.map((m) => (
+              <li
+                key={m.id}
+                className="rounded border bg-background p-2 text-xs"
+                data-testid="exact-mitigation"
+                data-rule={m.ruleId}
+              >
+                <div className="flex flex-wrap items-center gap-1.5">
+                  <Badge
+                    variant="secondary"
+                    className={cn(
+                      'text-[10px]',
+                      m.severity === 'critical' && 'bg-rose-100 text-rose-800 dark:bg-rose-950',
+                      m.severity === 'major' && 'bg-amber-100 text-amber-800 dark:bg-amber-950'
+                    )}
+                  >
+                    {m.severity}
+                  </Badge>
+                  <Badge variant="secondary" className="text-[10px]">
+                    {m.ruleId}
+                  </Badge>
+                  <span className="break-all font-mono text-[11px] text-muted-foreground">
+                    {m.location}
+                  </span>
+                </div>
+                <p className="mt-1 font-medium">{m.message}</p>
+                {m.remediation ? (
+                  <p className="mt-1 text-muted-foreground">
+                    <span className="font-semibold">Fix: </span>
+                    {m.remediation}
+                  </p>
+                ) : null}
+              </li>
+            ))}
+          </ul>
+        </div>
+      ) : null}
+
       {playbook.length > 0 ? (
         <div className="mt-3">
           <h4 className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
-            How to improve
+            {mitigations.length > 0 ? 'General playbook' : 'How to improve'}
           </h4>
           <ol className="mt-1 space-y-2">
             {playbook.slice(0, 3).map((step) => (
@@ -300,4 +359,55 @@ function rankPlaybookSteps(
 
 function bandForScore(metric: MetricDefinitionDto, score: number) {
   return metric.bands.find((b) => score >= b.min && score <= b.max);
+}
+
+export interface Mitigation {
+  id: string;
+  ruleId: string;
+  severity: Smell['severity'];
+  message: string;
+  location: string;
+  remediation: string | null;
+}
+
+const SEVERITY_RANK: Record<Smell['severity'], number> = {
+  critical: 0,
+  major: 1,
+  minor: 2,
+  info: 3,
+};
+
+/**
+ * Filter the report's top smells down to ones the user can act on for THIS
+ * metric, then enrich each one with the matching catalog remediation. The
+ * panel renders these as the "Exact mitigations" list — one row per
+ * offending function/class with file:line and a concrete fix.
+ */
+export function pickMitigations(
+  metric: MetricDefinitionDto,
+  topSmells: ReadonlyArray<Smell>,
+  smellCatalog: ReadonlyArray<SmellDefinitionDto>
+): Mitigation[] {
+  const related = new Set(metric.relatedSmells);
+  if (related.size === 0) return [];
+  const catalogByRule = new Map(smellCatalog.map((s) => [s.ruleId, s]));
+  return topSmells
+    .filter((s) => related.has(s.ruleId))
+    .sort((a, b) => SEVERITY_RANK[a.severity] - SEVERITY_RANK[b.severity])
+    .slice(0, 5)
+    .map((s) => {
+      const loc = s.location
+        ? s.location.startLine === s.location.endLine
+          ? `${s.file}:${s.location.startLine}`
+          : `${s.file}:${s.location.startLine}-${s.location.endLine}`
+        : s.file;
+      return {
+        id: s.id,
+        ruleId: s.ruleId,
+        severity: s.severity,
+        message: s.message,
+        location: loc,
+        remediation: catalogByRule.get(s.ruleId)?.remediation ?? null,
+      };
+    });
 }

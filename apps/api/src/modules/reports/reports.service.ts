@@ -40,7 +40,10 @@ export class ReportsService {
     const smellRows = await this.prisma.smell.findMany({
       where: { reportId: report.id },
     });
-    const topSmells = pickTopSmells(smellRows, 5);
+    // 20 keeps the payload small but gives the web UI's per-metric exact-
+    // mitigation panels enough offenders to render — when filtered to one
+    // metric's relatedSmells, 5 usually meant 0–2 hits per panel.
+    const topSmells = pickTopSmells(smellRows, 20);
     // Resolve cycle node IDs to display names from the IR module list. New IR
     // emits edges + a representative path; older IR may only have `nodes`.
     const moduleNameById = new Map(ir.modules.map((m) => [m.id, m.name]));

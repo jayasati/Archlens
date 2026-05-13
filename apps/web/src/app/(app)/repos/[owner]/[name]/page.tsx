@@ -7,6 +7,7 @@ import type {
   ReportModuleScoreDto,
   ReportSummaryDto,
   ScanDto,
+  SmellDefinitionDto,
 } from '@archlens/shared-types';
 import { ApiError } from '@/lib/api/client';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
@@ -27,6 +28,7 @@ import { getSessionToken } from '@/lib/auth/server';
 import { loadRepoContext } from '@/lib/api/repo-loader';
 import { getReportSummaryServer, listReportModulesServer } from '@/lib/api/reports';
 import { getMetricCatalogServer } from '@/lib/api/metric-catalog';
+import { getSmellCatalogServer } from '@/lib/api/smell-catalog';
 import { RescanButton } from '@/components/scan/rescan-button';
 import { scoreToGrade } from '@/lib/utils/grade';
 import { formatScore, formatRatio, formatOptionalInt } from '@/lib/utils/format';
@@ -46,6 +48,7 @@ interface RepoOverviewData {
   completedScans: ScanDto[];
   latestScan: ScanDto | null;
   metricCatalog: MetricDefinitionDto[];
+  smellCatalog: SmellDefinitionDto[];
 }
 
 async function loadRepoOverview(
@@ -71,17 +74,19 @@ async function loadRepoOverview(
       completedScans: [],
       latestScan,
       metricCatalog: [],
+      smellCatalog: [],
     };
   }
 
   // Trend is fetched lazily inside <ScoreTrendServer> wrapped in Suspense,
   // so score card + ratings + modules paint without waiting on it.
-  // The metric catalog is a public, cacheable endpoint — fail soft if it's
-  // unreachable so we never block a report from rendering.
-  const [summary, modules, metricCatalog] = await Promise.all([
+  // The metric + smell catalogs are public, cacheable endpoints — fail soft
+  // if they're unreachable so a transient outage never blocks a report.
+  const [summary, modules, metricCatalog, smellCatalog] = await Promise.all([
     getReportSummaryServer(token, latestCompleted.id),
     listReportModulesServer(token, latestCompleted.id),
     getMetricCatalogServer().catch(() => [] as MetricDefinitionDto[]),
+    getSmellCatalogServer().catch(() => [] as SmellDefinitionDto[]),
   ]);
 
   return {
@@ -93,6 +98,7 @@ async function loadRepoOverview(
     completedScans: completed,
     latestScan,
     metricCatalog,
+    smellCatalog,
   };
 }
 
@@ -118,6 +124,7 @@ export default async function RepoOverviewPage({ params }: PageProps) {
     completedScans,
     latestScan,
     metricCatalog,
+    smellCatalog,
   } = data;
 
   if (!summary) {
@@ -174,6 +181,7 @@ export default async function RepoOverviewPage({ params }: PageProps) {
             metric={metricBy.get('complexity')}
             modules={modules}
             topSmells={summary.topSmells}
+            smellCatalog={smellCatalog}
           />
           <RatingTileExpandable
             metricId="duplication"
@@ -184,6 +192,7 @@ export default async function RepoOverviewPage({ params }: PageProps) {
             metric={metricBy.get('duplication')}
             modules={modules}
             topSmells={summary.topSmells}
+            smellCatalog={smellCatalog}
           />
           <RatingTileExpandable
             metricId="coupling"
@@ -194,6 +203,7 @@ export default async function RepoOverviewPage({ params }: PageProps) {
             metric={metricBy.get('coupling')}
             modules={modules}
             topSmells={summary.topSmells}
+            smellCatalog={smellCatalog}
           />
           <RatingTileExpandable
             metricId="cohesion"
@@ -204,6 +214,7 @@ export default async function RepoOverviewPage({ params }: PageProps) {
             metric={metricBy.get('cohesion')}
             modules={modules}
             topSmells={summary.topSmells}
+            smellCatalog={smellCatalog}
           />
           <RatingTile
             label="Smells"
