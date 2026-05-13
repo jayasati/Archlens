@@ -118,6 +118,90 @@ describe('Repositories (e2e)', () => {
       .expect(404);
   });
 
+  it('PATCH /repositories/:id updates the default branch', async () => {
+    const created = await request(app.getHttpServer())
+      .post('/repositories')
+      .set('Authorization', `Bearer ${token}`)
+      .send({ owner: 'pranjal0jais', name: 'Wandr' })
+      .expect(201);
+    expect(created.body.defaultBranch).toBe('main');
+
+    const updated = await request(app.getHttpServer())
+      .patch(`/repositories/${created.body.id}`)
+      .set('Authorization', `Bearer ${token}`)
+      .send({ defaultBranch: 'master' })
+      .expect(200);
+    expect(updated.body.defaultBranch).toBe('master');
+    expect(updated.body.id).toBe(created.body.id);
+
+    const fetched = await request(app.getHttpServer())
+      .get(`/repositories/${created.body.id}`)
+      .set('Authorization', `Bearer ${token}`)
+      .expect(200);
+    expect(fetched.body.defaultBranch).toBe('master');
+  });
+
+  it('PATCH /repositories/:id can toggle the private flag', async () => {
+    const created = await request(app.getHttpServer())
+      .post('/repositories')
+      .set('Authorization', `Bearer ${token}`)
+      .send({ owner: 'octocat', name: 'hello-world' })
+      .expect(201);
+    expect(created.body.private).toBe(false);
+
+    const updated = await request(app.getHttpServer())
+      .patch(`/repositories/${created.body.id}`)
+      .set('Authorization', `Bearer ${token}`)
+      .send({ private: true })
+      .expect(200);
+    expect(updated.body.private).toBe(true);
+    // defaultBranch is untouched when only `private` is sent.
+    expect(updated.body.defaultBranch).toBe('main');
+  });
+
+  it('PATCH /repositories/:id rejects an empty body (zod refine)', async () => {
+    const created = await request(app.getHttpServer())
+      .post('/repositories')
+      .set('Authorization', `Bearer ${token}`)
+      .send({ owner: 'octocat', name: 'hello-world' })
+      .expect(201);
+
+    await request(app.getHttpServer())
+      .patch(`/repositories/${created.body.id}`)
+      .set('Authorization', `Bearer ${token}`)
+      .send({})
+      .expect(400);
+  });
+
+  it('PATCH /repositories/:id rejects a blank branch', async () => {
+    const created = await request(app.getHttpServer())
+      .post('/repositories')
+      .set('Authorization', `Bearer ${token}`)
+      .send({ owner: 'octocat', name: 'hello-world' })
+      .expect(201);
+
+    await request(app.getHttpServer())
+      .patch(`/repositories/${created.body.id}`)
+      .set('Authorization', `Bearer ${token}`)
+      .send({ defaultBranch: '' })
+      .expect(400);
+  });
+
+  it('PATCH /repositories/:id returns 404 for unknown id', async () => {
+    await request(app.getHttpServer())
+      .patch('/repositories/00000000-0000-0000-0000-000000000000')
+      .set('Authorization', `Bearer ${token}`)
+      .send({ defaultBranch: 'master' })
+      .expect(404);
+  });
+
+  it('PATCH /repositories/:id requires authentication', async () => {
+    await request(app.getHttpServer())
+      .patch('/repositories/00000000-0000-0000-0000-000000000000')
+      .send({ defaultBranch: 'master' })
+      .expect(401);
+  });
+
   it('DELETE /repositories/:id removes the repo', async () => {
     const created = await request(app.getHttpServer())
       .post('/repositories')

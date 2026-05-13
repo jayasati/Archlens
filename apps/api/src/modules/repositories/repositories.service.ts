@@ -3,6 +3,7 @@ import { Prisma, type Repository } from '@prisma/client';
 import type { RepositoryDto } from '@archlens/shared-types';
 import { PrismaService } from '../../database/prisma.service';
 import type { CreateRepositoryInput } from './dto/create-repository.schema';
+import type { UpdateRepositoryInput } from './dto/update-repository.schema';
 
 @Injectable()
 export class RepositoriesService {
@@ -44,6 +45,20 @@ export class RepositoriesService {
     const repo = await this.prisma.repository.findFirst({
       where: { id, userId },
     });
+    if (!repo) throw new NotFoundException('Repository not found');
+    return this.toDto(repo);
+  }
+
+  async update(userId: string, id: string, input: UpdateRepositoryInput): Promise<RepositoryDto> {
+    const result = await this.prisma.repository.updateMany({
+      where: { id, userId },
+      data: {
+        ...(input.defaultBranch !== undefined && { defaultBranch: input.defaultBranch }),
+        ...(input.private !== undefined && { private: input.private }),
+      },
+    });
+    if (result.count === 0) throw new NotFoundException('Repository not found');
+    const repo = await this.prisma.repository.findFirst({ where: { id, userId } });
     if (!repo) throw new NotFoundException('Repository not found');
     return this.toDto(repo);
   }

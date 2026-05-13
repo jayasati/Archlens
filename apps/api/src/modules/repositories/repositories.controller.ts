@@ -7,6 +7,7 @@ import {
   HttpStatus,
   Param,
   ParseUUIDPipe,
+  Patch,
   Post,
   UnauthorizedException,
 } from '@nestjs/common';
@@ -15,6 +16,7 @@ import { CurrentUser } from '../../common/decorators/current-user.decorator';
 import { ZodValidationPipe } from '../../common/pipes/zod-validation.pipe';
 import { RepositoriesService } from './repositories.service';
 import { createRepositorySchema, type CreateRepositoryInput } from './dto/create-repository.schema';
+import { updateRepositorySchema, type UpdateRepositoryInput } from './dto/update-repository.schema';
 
 @Controller('repositories')
 export class RepositoriesController {
@@ -42,6 +44,16 @@ export class RepositoriesController {
   ): Promise<RepositoryDto> {
     if (!user) throw new UnauthorizedException();
     return this.repos.findOne(user.sub, id);
+  }
+
+  @Patch(':id')
+  update(
+    @CurrentUser() user: JwtPayload | undefined,
+    @Param('id', new ParseUUIDPipe()) id: string,
+    @Body(new ZodValidationPipe(updateRepositorySchema)) body: UpdateRepositoryInput
+  ): Promise<RepositoryDto> {
+    if (!user) throw new UnauthorizedException();
+    return this.repos.update(user.sub, id, body);
   }
 
   @Delete(':id')

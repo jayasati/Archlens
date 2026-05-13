@@ -1,4 +1,8 @@
-import type { CreateRepositoryRequestDto, RepositoryDto } from '@archlens/shared-types';
+import type {
+  CreateRepositoryRequestDto,
+  RepositoryDto,
+  UpdateRepositoryRequestDto,
+} from '@archlens/shared-types';
 import { apiFetch, serverApiFetch, type ApiRequestOptions } from './client';
 
 export function listRepos(token: string | null): Promise<RepositoryDto[]> {
@@ -18,6 +22,14 @@ export function createRepo(
   body: CreateRepositoryRequestDto
 ): Promise<RepositoryDto> {
   return apiFetch<RepositoryDto>('/repositories', { method: 'POST', body, token });
+}
+
+export function updateRepo(
+  token: string | null,
+  id: string,
+  body: UpdateRepositoryRequestDto
+): Promise<RepositoryDto> {
+  return apiFetch<RepositoryDto>(`/repositories/${id}`, { method: 'PATCH', body, token });
 }
 
 export function deleteRepo(token: string | null, id: string): Promise<void> {

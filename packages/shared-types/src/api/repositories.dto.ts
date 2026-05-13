@@ -20,3 +20,8 @@ export interface CreateRepositoryRequestDto {
   private?: boolean;
   htmlUrl?: string;
 }
+
+export interface UpdateRepositoryRequestDto {
+  defaultBranch?: string;
+  private?: boolean;
+}
