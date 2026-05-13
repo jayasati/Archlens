@@ -128,3 +128,28 @@ export interface ReportFileDetailDto {
   functions: FunctionIR[];
   smells: Smell[];
 }
+
+export interface ReportFileSourceDto {
+  id: string;
+  irFileId: string;
+  path: string;
+  language: Language;
+  content: string;
+  /** True when the original file exceeded the per-file size cap and only a prefix was stored. */
+  truncated: boolean;
+  byteSize?: number;
+  smells: Smell[];
+}
+
+export interface FixSuggestionDto {
+  id: string;
+  smellId: string;
+  model: string;
+  promptHash: string;
+  contentMarkdown: string;
+  promptTokens?: number;
+  completionTokens?: number;
+  generatedAt: string;
+  /** True when served from the persisted cache, false when freshly generated. */
+  cached: boolean;
+}

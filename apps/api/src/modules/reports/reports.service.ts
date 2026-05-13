@@ -9,6 +9,7 @@ import type {
 } from '@archlens/ir-schema';
 import type {
   ReportFileDetailDto,
+  ReportFileSourceDto,
   ReportModuleDetailDto,
   ReportModuleFileDto,
   ReportModuleScoreDto,
@@ -16,6 +17,7 @@ import type {
 } from '@archlens/shared-types';
 import { PrismaService } from '../../database/prisma.service';
 import { IrLoader } from './ir-loader';
+import { SourceLoader } from './source-loader';
 
 const SEVERITY_RANK: Record<string, number> = {
   critical: 0,
@@ -28,7 +30,8 @@ const SEVERITY_RANK: Record<string, number> = {
 export class ReportsService {
   constructor(
     private readonly prisma: PrismaService,
-    private readonly irLoader: IrLoader
+    private readonly irLoader: IrLoader,
+    private readonly sourceLoader: SourceLoader
   ) {}
 
   async getSummary(userId: string, scanId: string): Promise<ReportSummaryDto> {
@@ -209,6 +212,49 @@ export class ReportsService {
       classes: irFile.classes,
       functions: irFile.functions,
       smells: collectFileSmells(irFile),
+    };
+  }
+
+  async getFileSource(
+    userId: string,
+    scanId: string,
+    fileId: string
+  ): Promise<ReportFileSourceDto> {
+    const report = await this.loadOwnedReport(userId, scanId);
+    const dbFile = await this.prisma.file.findFirst({
+      where: { id: fileId, reportId: report.id },
+    });
+    if (!dbFile) throw new NotFoundException('File not found');
+
+    const content = await this.sourceLoader.loadFile(report.sourceDirPath, dbFile.irFileId);
+    if (content === null) {
+      throw new NotFoundException(
+        'Source not stored for this file. It may predate source snapshotting or have been skipped during scan.'
+      );
+    }
+
+    const ir = await this.irLoader.load(report.irBlobPath);
+    let irFile: FileIR | undefined;
+    for (const m of ir.modules) {
+      const f = m.files.find((x) => x.id === dbFile.irFileId);
+      if (f) {
+        irFile = f;
+        break;
+      }
+    }
+    const smells = irFile ? collectFileSmells(irFile) : [];
+
+    return {
+      id: dbFile.id,
+      irFileId: dbFile.irFileId,
+      path: dbFile.path,
+      language: dbFile.language as ReportFileSourceDto['language'],
+      content,
+      truncated: dbFile.truncated,
+      byteSize: dbFile.byteSize ?? undefined,
+      smells: smells.sort(
+        (a, b) => (SEVERITY_RANK[a.severity] ?? 99) - (SEVERITY_RANK[b.severity] ?? 99)
+      ),
     };
   }
 

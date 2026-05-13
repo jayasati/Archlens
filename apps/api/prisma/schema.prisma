@@ -102,12 +102,14 @@ model Report {
   functionsCount   Int      @default(0)
   smellsCount      Int      @default(0)
   irBlobPath       String
+  sourceDirPath    String?
   generatedAt      DateTime @default(now())
 
-  scan    Scan     @relation(fields: [scanId], references: [id], onDelete: Cascade)
-  modules Module[]
-  files   File[]
-  smells  Smell[]
+  scan        Scan            @relation(fields: [scanId], references: [id], onDelete: Cascade)
+  modules     Module[]
+  files       File[]
+  smells      Smell[]
+  suggestions FixSuggestion[]
 
   @@index([repoId, generatedAt])
   @@map("reports")
@@ -129,13 +131,16 @@ model Module {
 }
 
 model File {
-  id       String @id @default(uuid()) @db.Uuid
-  reportId String @db.Uuid
-  moduleId String @db.Uuid
-  irFileId String
-  path     String
-  language String
-  loc      Int    @default(0)
+  id        String  @id @default(uuid()) @db.Uuid
+  reportId  String  @db.Uuid
+  moduleId  String  @db.Uuid
+  irFileId  String
+  path      String
+  language  String
+  loc       Int     @default(0)
+  sha256    String?
+  byteSize  Int?
+  truncated Boolean @default(false)
 
   report Report  @relation(fields: [reportId], references: [id], onDelete: Cascade)
   module Module  @relation(fields: [moduleId], references: [id], onDelete: Cascade)
@@ -159,10 +164,30 @@ model Smell {
   startLine Int?
   endLine   Int?
 
-  report Report @relation(fields: [reportId], references: [id], onDelete: Cascade)
-  file   File?  @relation(fields: [fileId], references: [id], onDelete: SetNull)
+  report      Report          @relation(fields: [reportId], references: [id], onDelete: Cascade)
+  file        File?           @relation(fields: [fileId], references: [id], onDelete: SetNull)
+  suggestions FixSuggestion[]
 
   @@index([reportId])
   @@index([reportId, severity])
   @@map("smells")
+}
+
+model FixSuggestion {
+  id               String   @id @default(uuid()) @db.Uuid
+  smellId          String   @db.Uuid
+  reportId         String   @db.Uuid
+  model            String
+  promptHash       String
+  contentMarkdown  String
+  promptTokens     Int?
+  completionTokens Int?
+  createdAt        DateTime @default(now())
+
+  smell  Smell  @relation(fields: [smellId], references: [id], onDelete: Cascade)
+  report Report @relation(fields: [reportId], references: [id], onDelete: Cascade)
+
+  @@unique([smellId, model, promptHash])
+  @@index([reportId])
+  @@map("fix_suggestions")
 }

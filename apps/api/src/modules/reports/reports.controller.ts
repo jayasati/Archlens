@@ -2,6 +2,7 @@ import { Controller, Get, Param, ParseUUIDPipe, UnauthorizedException } from '@n
 import type {
   JwtPayload,
   ReportFileDetailDto,
+  ReportFileSourceDto,
   ReportModuleDetailDto,
   ReportModuleScoreDto,
   ReportSummaryDto,
@@ -39,6 +40,16 @@ export class ReportsController {
   ): Promise<ReportModuleDetailDto> {
     if (!user) throw new UnauthorizedException();
     return this.reports.getModule(user.sub, scanId, moduleId);
+  }
+
+  @Get(':scanId/files/:fileId/source')
+  getFileSource(
+    @CurrentUser() user: JwtPayload | undefined,
+    @Param('scanId', new ParseUUIDPipe()) scanId: string,
+    @Param('fileId', new ParseUUIDPipe()) fileId: string
+  ): Promise<ReportFileSourceDto> {
+    if (!user) throw new UnauthorizedException();
+    return this.reports.getFileSource(user.sub, scanId, fileId);
   }
 
   @Get(':scanId/files/:filePath')

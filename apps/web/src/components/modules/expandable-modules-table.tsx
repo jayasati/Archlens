@@ -4,10 +4,13 @@ import { Fragment, useState } from 'react';
 import { ChevronRight } from 'lucide-react';
 import type {
   ReportModuleDetailDto,
+  ReportModuleFileDto,
   ReportModuleScoreDto,
   Severity,
   Smell,
 } from '@archlens/shared-types';
+import { FileSourceView } from './file-source-view';
+import { SmellFixSuggestion } from './smell-fix-suggestion';
 import { Card } from '@/components/ui/card';
 import {
   Table,
@@ -181,7 +184,7 @@ export function ExpandableModulesTable({ scanId, modules }: ExpandableModulesTab
                   {isOpen ? (
                     <TableRow data-testid="module-detail">
                       <TableCell colSpan={colSpan} className="bg-muted/20 p-4">
-                        <ModuleDetailPanel module={m} state={detailState} />
+                        <ModuleDetailPanel scanId={scanId} module={m} state={detailState} />
                       </TableCell>
                     </TableRow>
                   ) : null}
@@ -217,9 +220,11 @@ export function ExpandableModulesTable({ scanId, modules }: ExpandableModulesTab
 }
 
 function ModuleDetailPanel({
+  scanId,
   module,
   state,
 }: {
+  scanId: string;
   module: ReportModuleScoreDto;
   state: DetailState | undefined;
 }) {
@@ -268,7 +273,7 @@ function ModuleDetailPanel({
       ) : state.detail ? (
         <>
           <FilesSection detail={state.detail} />
-          <SmellsSection smells={state.detail.smells} />
+          <SmellsSection scanId={scanId} files={state.detail.files} smells={state.detail.smells} />
         </>
       ) : null}
     </div>
@@ -341,7 +346,24 @@ function FilesSection({ detail }: { detail: ReportModuleDetailDto }) {
   );
 }
 
-function SmellsSection({ smells }: { smells: Smell[] }) {
+interface OpenSource {
+  fileId: string;
+  startLine?: number;
+  endLine?: number;
+  smellId: string;
+}
+
+function SmellsSection({
+  scanId,
+  files,
+  smells,
+}: {
+  scanId: string;
+  files: ReportModuleFileDto[];
+  smells: Smell[];
+}) {
+  const [open, setOpen] = useState<OpenSource | null>(null);
+
   if (smells.length === 0) {
     return (
       <div className="text-sm text-muted-foreground">
@@ -349,6 +371,11 @@ function SmellsSection({ smells }: { smells: Smell[] }) {
       </div>
     );
   }
+
+  // Resolve a smell's file (by IR path) to its DB file id. The smell.file
+  // field stores the IR-relative path, which matches ReportModuleFileDto.path.
+  const fileIdByPath = new Map(files.map((f) => [f.path, f.id]));
+
   const grouped: Record<Severity, Smell[]> = {
     critical: [],
     major: [],
@@ -373,18 +400,59 @@ function SmellsSection({ smells }: { smells: Smell[] }) {
                 </span>
               </div>
               <ul className="space-y-1 text-sm">
-                {grouped[sev].map((s) => (
-                  <li key={s.id} className="rounded border bg-background px-3 py-1.5">
-                    <div className="flex items-baseline justify-between gap-3">
-                      <span className="font-medium">{s.ruleId}</span>
-                      <span className="font-mono text-xs text-muted-foreground">
-                        {s.file}
-                        {s.location ? `:${s.location.startLine}` : ''}
-                      </span>
-                    </div>
-                    <div className="text-xs text-muted-foreground">{s.message}</div>
-                  </li>
-                ))}
+                {grouped[sev].map((s) => {
+                  const fileId = fileIdByPath.get(s.file);
+                  const isOpen = open?.smellId === s.id;
+                  const canOpen = Boolean(fileId);
+                  return (
+                    <li key={s.id} className="rounded border bg-background">
+                      <button
+                        type="button"
+                        disabled={!canOpen}
+                        onClick={() => {
+                          if (!fileId) return;
+                          if (isOpen) {
+                            setOpen(null);
+                            return;
+                          }
+                          setOpen({
+                            fileId,
+                            startLine: s.location?.startLine,
+                            endLine: s.location?.endLine,
+                            smellId: s.id,
+                          });
+                        }}
+                        className="flex w-full flex-col items-stretch gap-0.5 px-3 py-1.5 text-left hover:bg-muted/40 disabled:cursor-not-allowed disabled:opacity-60"
+                        data-testid="smell-row"
+                        title={
+                          canOpen
+                            ? 'Show source'
+                            : 'Source not available — file is outside the captured snapshot'
+                        }
+                      >
+                        <div className="flex items-baseline justify-between gap-3">
+                          <span className="font-medium">{s.ruleId}</span>
+                          <span className="font-mono text-xs text-muted-foreground">
+                            {s.file}
+                            {s.location ? `:${s.location.startLine}` : ''}
+                          </span>
+                        </div>
+                        <div className="text-xs text-muted-foreground">{s.message}</div>
+                      </button>
+                      {isOpen && fileId ? (
+                        <div className="space-y-2 border-t p-2">
+                          <FileSourceView
+                            scanId={scanId}
+                            fileId={fileId}
+                            focusStartLine={s.location?.startLine}
+                            focusEndLine={s.location?.endLine}
+                          />
+                          <SmellFixSuggestion scanId={scanId} smellId={s.id} />
+                        </div>
+                      ) : null}
+                    </li>
+                  );
+                })}
               </ul>
             </div>
           ) : null

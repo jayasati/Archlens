@@ -1,5 +1,7 @@
 import type {
+  FixSuggestionDto,
   ReportFileDetailDto,
+  ReportFileSourceDto,
   ReportModuleDetailDto,
   ReportModuleScoreDto,
   ReportSummaryDto,
@@ -43,5 +45,26 @@ export function getReportFile(
 ): Promise<ReportFileDetailDto> {
   return apiFetch<ReportFileDetailDto>(`/reports/${scanId}/files/${encodeURIComponent(filePath)}`, {
     token,
+  });
+}
+
+export function getReportFileSource(
+  token: string | null,
+  scanId: string,
+  fileId: string
+): Promise<ReportFileSourceDto> {
+  return apiFetch<ReportFileSourceDto>(`/reports/${scanId}/files/${fileId}/source`, { token });
+}
+
+export function requestSmellFixSuggestion(
+  token: string | null,
+  scanId: string,
+  smellId: string,
+  options: { force?: boolean } = {}
+): Promise<FixSuggestionDto> {
+  return apiFetch<FixSuggestionDto>(`/reports/${scanId}/smells/${smellId}/suggest-fix`, {
+    method: 'POST',
+    token,
+    query: options.force ? { force: 'true' } : undefined,
   });
 }

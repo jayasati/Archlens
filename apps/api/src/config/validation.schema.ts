@@ -23,6 +23,12 @@ export const envSchema = z.object({
   GITHUB_CALLBACK_URL: z.string().url().default('http://localhost:3001/auth/github/callback'),
 
   WEB_APP_URL: z.string().url().default('http://localhost:3000'),
+
+  AZURE_OPENAI_ENDPOINT: z.string().url().optional(),
+  AZURE_OPENAI_API_KEY: z.string().min(1).optional(),
+  AZURE_OPENAI_API_VERSION: z.string().default('2024-12-01-preview'),
+  AZURE_OPENAI_DEPLOYMENT_NAME: z.string().default('gpt-4o'),
+  LLM_MAX_OUTPUT_TOKENS: z.coerce.number().int().positive().default(800),
 });
 
 export type Env = z.infer<typeof envSchema>;

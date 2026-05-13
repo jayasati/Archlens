@@ -6,6 +6,7 @@ import type { Module as IrModule, Repo, Smell as IrSmell } from '@archlens/ir-sc
 import type { WorkerConfig } from '../../config/configuration';
 import { PrismaService } from '../../database/prisma.service';
 import type { PipelineContext, ProgressReporter } from '../pipeline.types';
+import { snapshotSourceFiles, type SnapshotFileRecord } from './snapshot-source';
 
 @Injectable()
 export class PersistStep {
@@ -24,6 +25,15 @@ export class PersistStep {
     const irBlobPath = path.join(reportsDir, `${ctx.input.scanId}.json`);
     await fs.writeFile(irBlobPath, JSON.stringify(ir, null, 2), 'utf8');
     ctx.irBlobPath = irBlobPath;
+
+    let snapshot;
+    try {
+      snapshot = await snapshotSourceFiles(ir, ctx.repoPath, reportsDir, ctx.input.scanId);
+      this.logger.log(`Snapshotted ${snapshot.files.size} source files to ${snapshot.sourceDir}`);
+    } catch (err) {
+      this.logger.warn(`Source snapshot failed: ${(err as Error).message}`);
+      snapshot = { sourceDir: '', files: new Map<string, SnapshotFileRecord>() };
+    }
 
     const counts = countIr(ir);
 
@@ -52,6 +62,7 @@ export class PersistStep {
             functionsCount: counts.functions,
             smellsCount: counts.smells,
             irBlobPath,
+            sourceDirPath: snapshot.sourceDir || null,
           },
         });
 
@@ -67,6 +78,7 @@ export class PersistStep {
           });
 
           for (const irFile of irModule.files) {
+            const snap = snapshot.files.get(irFile.id);
             const fileRow = await tx.file.create({
               data: {
                 reportId: report.id,
@@ -75,6 +87,9 @@ export class PersistStep {
                 path: irFile.path,
                 language: irFile.language,
                 loc: irFile.loc,
+                sha256: snap?.sha256 ?? null,
+                byteSize: snap?.byteSize ?? null,
+                truncated: snap?.truncated ?? false,
               },
             });
 
